@@ -268,7 +268,7 @@
     <div class="container">
         <div class="header">
             <h1>🔍 Bluesky Audience Overlap Analyzer</h1>
-            <p>Analyze follower overlap between 2-3 Bluesky accounts. Paste handles or full profile URLs.</p>
+            <p>Analyze follower OR engagement overlap between 2-3 Bluesky accounts. See who follows multiple creators, or who actively engages (likes, reposts, replies) with their content.</p>
         </div>
 
         <div class="card">
@@ -293,6 +293,39 @@
                 💡 Tip: You can paste either handles (e.g., "midimyers.com") or full URLs (e.g., "https://bsky.app/profile/midimyers.com")
             </div>
             
+            <div style="margin-top: 20px; margin-bottom: 16px;">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">Analysis Type</h3>
+                
+                <label style="display: flex; align-items: center; padding: 12px; background: #f9fafb; border-radius: 6px; cursor: pointer; margin-bottom: 8px;">
+                    <input type="radio" name="analysisType" value="followers" checked style="margin-right: 12px;">
+                    <div>
+                        <div style="font-weight: 600; font-size: 14px;">Follower Overlap</div>
+                        <div style="font-size: 12px; color: #6b7280;">See which accounts follow multiple creators (faster, shows potential audience)</div>
+                    </div>
+                </label>
+                
+                <label style="display: flex; align-items: center; padding: 12px; background: #f9fafb; border-radius: 6px; cursor: pointer;">
+                    <input type="radio" name="analysisType" value="engagement" style="margin-right: 12px;">
+                    <div>
+                        <div style="font-weight: 600; font-size: 14px;">Engagement Overlap 🔥</div>
+                        <div style="font-size: 12px; color: #6b7280;">See who actively engages (likes, reposts, replies) with multiple creators (slower, shows engaged audience)</div>
+                    </div>
+                </label>
+            </div>
+            
+            <div id="engagementSettings" style="display: none; padding: 12px; background: #fef3c7; border-radius: 6px; margin-bottom: 12px;">
+                <div style="font-size: 13px; color: #92400e; margin-bottom: 8px;">
+                    <strong>Engagement Analysis Settings:</strong>
+                </div>
+                <div class="input-group" style="margin-bottom: 8px;">
+                    <label style="font-size: 13px;">Posts to analyze per account (1-50)</label>
+                    <input type="number" id="postsToAnalyze" value="20" min="1" max="50" style="padding: 6px;">
+                </div>
+                <div style="font-size: 12px; color: #78350f;">
+                    ⚡ More posts = more accurate but slower. 20 posts takes ~2-3 minutes per account.
+                </div>
+            </div>
+            
             <button class="btn" id="analyzeBtn" onclick="analyzeOverlap()">Analyze Overlap</button>
             
             <div id="progressDiv" style="display: none;" class="alert alert-info"></div>
@@ -304,6 +337,21 @@
 
     <script>
         let isLoading = false;
+
+        // Show/hide engagement settings based on analysis type
+        document.addEventListener('DOMContentLoaded', function() {
+            const radios = document.querySelectorAll('input[name="analysisType"]');
+            radios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    const engagementSettings = document.getElementById('engagementSettings');
+                    if (this.value === 'engagement') {
+                        engagementSettings.style.display = 'block';
+                    } else {
+                        engagementSettings.style.display = 'none';
+                    }
+                });
+            });
+        });
 
         function extractHandle(input) {
             input = input.trim();
@@ -409,6 +457,93 @@
             
             return followers;
         }
+        
+        async function getAuthorFeed(actor, limit = 20) {
+            try {
+                const response = await fetch(
+                    `https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(actor)}&limit=${limit}`
+                );
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch posts: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                return data.feed || [];
+            } catch (err) {
+                console.error('Error fetching posts:', err);
+                return [];
+            }
+        }
+        
+        async function getPostLikes(postUri) {
+            try {
+                const response = await fetch(
+                    `https://public.api.bsky.app/xrpc/app.bsky.feed.getLikes?uri=${encodeURIComponent(postUri)}&limit=100`
+                );
+                
+                if (!response.ok) {
+                    return [];
+                }
+                
+                const data = await response.json();
+                return (data.likes || []).map(like => like.actor.did);
+            } catch (err) {
+                return [];
+            }
+        }
+        
+        async function getPostReposts(postUri) {
+            try {
+                const response = await fetch(
+                    `https://public.api.bsky.app/xrpc/app.bsky.feed.getRepostedBy?uri=${encodeURIComponent(postUri)}&limit=100`
+                );
+                
+                if (!response.ok) {
+                    return [];
+                }
+                
+                const data = await response.json();
+                return (data.repostedBy || []).map(user => user.did);
+            } catch (err) {
+                return [];
+            }
+        }
+        
+        async function getEngagedUsers(actor, maxPosts = 20) {
+            const engagers = new Map(); // Map of DID -> engagement count
+            
+            showProgress(`Fetching posts from ${actor}...`);
+            const feed = await getAuthorFeed(actor, maxPosts);
+            
+            showProgress(`Analyzing engagement on ${feed.length} posts from ${actor}...`);
+            
+            for (let i = 0; i < feed.length; i++) {
+                const post = feed[i].post;
+                const postUri = post.uri;
+                
+                showProgress(`${actor}: analyzing post ${i + 1}/${feed.length}`);
+                
+                // Get likes
+                const likers = await getPostLikes(postUri);
+                likers.forEach(did => {
+                    const current = engagers.get(did) || 0;
+                    engagers.set(did, current + 1);
+                });
+                
+                // Get reposts
+                const reposters = await getPostReposts(postUri);
+                reposters.forEach(did => {
+                    const current = engagers.get(did) || 0;
+                    engagers.set(did, current + 2); // Reposts weighted 2x
+                });
+                
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+            
+            showProgress(`Found ${engagers.size.toLocaleString()} engaged users for ${actor}`);
+            return new Set(engagers.keys());
+        }
 
         function getInterpretation(jaccard) {
             if (jaccard > 50) return { label: 'Very High', color: '#10b981', emoji: '⭐' };
@@ -454,12 +589,30 @@
                     profiles.push(profile);
                 }
                 
-                // Fetch followers
-                showProgress('Fetching followers...');
-                const followerSets = [];
-                for (let i = 0; i < profiles.length; i++) {
-                    const followers = await fetchFollowers(profiles[i].did);
-                    followerSets.push(followers);
+                // Check analysis type
+                const analysisType = document.querySelector('input[name="analysisType"]:checked').value;
+                const isEngagementAnalysis = analysisType === 'engagement';
+                
+                let audienceSets = [];
+                let audienceLabel = 'followers';
+                
+                if (isEngagementAnalysis) {
+                    // Fetch engaged users
+                    const maxPosts = parseInt(document.getElementById('postsToAnalyze').value) || 20;
+                    showProgress('Analyzing engagement...');
+                    audienceLabel = 'engaged users';
+                    
+                    for (let i = 0; i < profiles.length; i++) {
+                        const engagedUsers = await getEngagedUsers(profiles[i].did, maxPosts);
+                        audienceSets.push(engagedUsers);
+                    }
+                } else {
+                    // Fetch followers
+                    showProgress('Fetching followers...');
+                    for (let i = 0; i < profiles.length; i++) {
+                        const followers = await fetchFollowers(profiles[i].did);
+                        audienceSets.push(followers);
+                    }
                 }
                 
                 // Calculate overlaps
@@ -469,21 +622,22 @@
                 
                 for (let i = 0; i < profiles.length; i++) {
                     for (let j = i + 1; j < profiles.length; j++) {
-                        const overlap = new Set([...followerSets[i]].filter(x => followerSets[j].has(x)));
-                        const totalUnique = new Set([...followerSets[i], ...followerSets[j]]);
+                        const overlap = new Set([...audienceSets[i]].filter(x => audienceSets[j].has(x)));
+                        const totalUnique = new Set([...audienceSets[i], ...audienceSets[j]]);
                         const jaccardIndex = (overlap.size / totalUnique.size) * 100;
                         
                         pairwiseOverlaps.push({
                             account1: profiles[i],
                             account2: profiles[j],
-                            followers1: followerSets[i].size,
-                            followers2: followerSets[j].size,
+                            followers1: audienceSets[i].size,
+                            followers2: audienceSets[j].size,
                             overlap: overlap.size,
-                            overlapPct1: (overlap.size / followerSets[i].size) * 100,
-                            overlapPct2: (overlap.size / followerSets[j].size) * 100,
+                            overlapPct1: (overlap.size / audienceSets[i].size) * 100,
+                            overlapPct2: (overlap.size / audienceSets[j].size) * 100,
                             jaccard: jaccardIndex,
-                            unique1: followerSets[i].size - overlap.size,
-                            unique2: followerSets[j].size - overlap.size
+                            unique1: audienceSets[i].size - overlap.size,
+                            unique2: audienceSets[j].size - overlap.size,
+                            audienceType: audienceLabel
                         });
                     }
                 }
@@ -492,14 +646,14 @@
                 let threeWayOverlap = null;
                 if (profiles.length === 3) {
                     const overlap3 = new Set(
-                        [...followerSets[0]].filter(x => 
-                            followerSets[1].has(x) && followerSets[2].has(x)
+                        [...audienceSets[0]].filter(x => 
+                            audienceSets[1].has(x) && audienceSets[2].has(x)
                         )
                     );
                     threeWayOverlap = overlap3.size;
                 }
                 
-                displayResults(profiles, followerSets, pairwiseOverlaps, threeWayOverlap);
+                displayResults(profiles, audienceSets, pairwiseOverlaps, threeWayOverlap, audienceLabel, isEngagementAnalysis);
                 hideProgress();
                 
             } catch (err) {
@@ -512,7 +666,7 @@
             }
         }
 
-        function displayResults(profiles, followerSets, pairwiseOverlaps, threeWayOverlap) {
+        function displayResults(profiles, audienceSets, pairwiseOverlaps, threeWayOverlap, audienceLabel = 'followers', isEngagementAnalysis = false) {
             const resultsDiv = document.getElementById('resultsDiv');
             
             let html = '<div class="results"><h2>📊 Results</h2>';
@@ -524,8 +678,8 @@
                     <div class="account-card">
                         <div class="account-name">${profile.displayName || profile.handle}</div>
                         <div class="account-handle">@${profile.handle}</div>
-                        <div class="account-followers">${followerSets[idx].size.toLocaleString()}</div>
-                        <div class="account-label">followers</div>
+                        <div class="account-followers">${audienceSets[idx].size.toLocaleString()}</div>
+                        <div class="account-label">${audienceLabel}</div>
                     </div>
                 `;
             });
@@ -534,6 +688,7 @@
             // Pairwise comparisons
             pairwiseOverlaps.forEach(comp => {
                 const interp = getInterpretation(comp.jaccard);
+                const capitalizedLabel = audienceLabel.charAt(0).toUpperCase() + audienceLabel.slice(1);
                 
                 html += `
                     <div class="comparison">
@@ -541,12 +696,12 @@
                         
                         <div class="metrics-grid">
                             <div class="metric">
-                                <div class="metric-label">Shared Followers</div>
+                                <div class="metric-label">Shared ${capitalizedLabel}</div>
                                 <div class="metric-value" style="color: #10b981;">${comp.overlap.toLocaleString()}</div>
                             </div>
                             
                             <div class="metric">
-                                <div class="metric-label">Jaccard Similarity</div>
+                                <div class="metric-label">${isEngagementAnalysis ? 'Engagement' : 'Audience'} Similarity</div>
                                 <div class="metric-value" style="color: ${interp.color};">${comp.jaccard.toFixed(1)}%</div>
                             </div>
                             
@@ -575,17 +730,18 @@
             
             // 3-way overlap
             if (threeWayOverlap !== null) {
+                const capitalizedLabel = audienceLabel.charAt(0).toUpperCase() + audienceLabel.slice(1);
                 html += `
                     <div class="three-way">
                         <h3>🎯 Three-Way Overlap</h3>
                         <div style="font-size: 14px; color: #6b7280; margin-bottom: 8px;">
-                            Followers who follow ALL THREE accounts:
+                            ${capitalizedLabel} who ${isEngagementAnalysis ? 'engage with' : 'follow'} ALL THREE accounts:
                         </div>
                         <div style="font-size: 36px; font-weight: bold; color: #8b5cf6;">
                             ${threeWayOverlap.toLocaleString()}
                         </div>
                         <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">
-                            This is your core shared audience
+                            This is your core ${isEngagementAnalysis ? 'engaged' : 'shared'} audience
                         </div>
                     </div>
                 `;
@@ -594,17 +750,34 @@
             // Insights
             html += '<div class="insights"><h3>💡 Insights for Trustfund</h3><ul>';
             
-            if (pairwiseOverlaps[0].jaccard > 30) {
-                html += '<li>High overlap suggests these creators compete for the same audience - collaborations should focus on complementary content</li>';
-            }
-            if (pairwiseOverlaps[0].jaccard >= 15 && pairwiseOverlaps[0].jaccard <= 30) {
-                html += '<li>Moderate overlap is ideal for newsletter bundles - shared interest but each brings new readers</li>';
-            }
-            if (pairwiseOverlaps[0].jaccard < 15) {
-                html += '<li>Low overlap means great potential for cross-promotion - reach entirely new audiences</li>';
-            }
-            if (threeWayOverlap && threeWayOverlap > 100) {
-                html += `<li>Strong 3-way core audience (${threeWayOverlap.toLocaleString()}) makes this a great bundle opportunity</li>`;
+            if (isEngagementAnalysis) {
+                html += '<li><strong>Engagement analysis shows active participants</strong> - These are users who like, repost, and reply to content, not just passive followers. They\'re your most valuable audience segment.</li>';
+                
+                if (pairwiseOverlaps[0].jaccard > 15) {
+                    html += '<li><strong>High engagement overlap</strong> - These creators share highly active audience members who engage with both. Perfect for co-created content or collaborative newsletters.</li>';
+                }
+                if (pairwiseOverlaps[0].jaccard >= 8 && pairwiseOverlaps[0].jaccard <= 15) {
+                    html += '<li><strong>Moderate engagement overlap</strong> - Good mix of shared engaged users and unique audiences. Bundle opportunities could convert engaged followers from one creator to the other.</li>';
+                }
+                if (pairwiseOverlaps[0].jaccard < 8) {
+                    html += '<li><strong>Distinct engaged audiences</strong> - These creators have mostly different active communities. Collaborations could expose each to entirely new engaged audiences.</li>';
+                }
+                if (pairwiseOverlaps[0].overlap > 50) {
+                    html += `<li><strong>${pairwiseOverlaps[0].overlap.toLocaleString()} shared engaged users</strong> - This core group actively engages with both creators. They\'re prime candidates for premium bundled content.</li>`;
+                }
+            } else {
+                if (pairwiseOverlaps[0].jaccard > 30) {
+                    html += '<li><strong>High follower overlap</strong> - These creators compete for the same audience. Collaborations should focus on complementary content to avoid redundancy.</li>';
+                }
+                if (pairwiseOverlaps[0].jaccard >= 15 && pairwiseOverlaps[0].jaccard <= 30) {
+                    html += '<li><strong>Moderate overlap</strong> - Ideal for newsletter bundles. Shared interest shows compatibility, but each brings new readers to the other.</li>';
+                }
+                if (pairwiseOverlaps[0].jaccard < 15) {
+                    html += '<li><strong>Low overlap</strong> - Great potential for cross-promotion. Each creator can reach largely new audiences through collaboration.</li>';
+                }
+                if (threeWayOverlap && threeWayOverlap > 100) {
+                    html += `<li><strong>Strong 3-way core audience</strong> - ${threeWayOverlap.toLocaleString()} people follow all three creators, making this an excellent bundle opportunity.</li>`;
+                }
             }
             
             html += '</ul></div>';

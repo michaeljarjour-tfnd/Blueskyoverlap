@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
         sendProgress(15);
 
         const accountData = await Promise.all(
-          profiles.map(async (profile: BskyProfile) => {
+          profiles.map(async (profile: BskyProfile, idx: number) => {
             const [followerResult, engagementResult] = await Promise.all([
               getOrFetchFollowers(
                 profile.did,
@@ -110,16 +110,21 @@ export async function POST(req: NextRequest) {
                 },
                 abortController.signal
               ),
-              getOrFetchEngagement(
-                profile.did,
-                speedTier,
-                maxPosts,
-                (analyzed, total) => {
-                  postProgress[profile.did] = { analyzed, total };
-                  sendProgress(20);
-                },
-                abortController.signal
-              ),
+              // Stagger engagement fetches by 500ms per account so multiple large
+              // accounts don't all hammer the Bluesky API at exactly the same time.
+              (async () => {
+                if (idx > 0) await new Promise((r) => setTimeout(r, idx * 500));
+                return getOrFetchEngagement(
+                  profile.did,
+                  speedTier,
+                  maxPosts,
+                  (analyzed, total) => {
+                    postProgress[profile.did] = { analyzed, total };
+                    sendProgress(20);
+                  },
+                  abortController.signal
+                );
+              })(),
             ]);
 
             // Mark complete at 100% without changing the denominator.

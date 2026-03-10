@@ -188,9 +188,8 @@ export async function getEngagedUsers(
     reposters.forEach((did) => engagers.set(did, (engagers.get(did) ?? 0) + 2)); // 2x weight
 
     // Report after fetch (accurate), then small delay to avoid 429 rate limits.
-    // Without this, parallel account fetches hammer the API and trigger 30s backoffs.
     onProgress?.(i + 1, feed.length);
-    if (i < feed.length - 1) await sleep(80);
+    if (i < feed.length - 1) await sleep(50);
   }
 
   return {

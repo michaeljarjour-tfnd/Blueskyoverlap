@@ -44,6 +44,8 @@ export async function getOrFetchFollowers(
     try {
       const cached = (await redis.smembers(key)) as string[];
       if (cached && cached.length > 0) {
+        // Fire the completion callback so progress bars update on cache hits
+        onProgress?.(cached.length, cached.length);
         return { set: new Set(cached), fromCache: true };
       }
     } catch {
@@ -96,6 +98,8 @@ export async function getOrFetchEngagement(
     try {
       const cached = (await redis.smembers(key)) as string[];
       if (cached && cached.length > 0) {
+        // Fire completion callback so posts bar shows 100% on cache hits
+        onProgress?.(maxPosts, maxPosts);
         return {
           set: new Set(cached),
           stats: { totalLikes: 0, totalReposts: 0, postsAnalyzed: maxPosts },

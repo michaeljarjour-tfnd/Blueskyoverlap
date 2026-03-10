@@ -241,10 +241,12 @@ export default function Home() {
                 resultReceived = true;
                 setResult(event.data);
                 setPhase('results');
+                reader.cancel(); // Don't wait for stream to naturally close
               } else if (event.type === 'error') {
-                resultReceived = true; // treat error as a terminal event too
+                resultReceived = true;
                 setErrorMsg(event.message);
                 setPhase('error');
+                reader.cancel();
               }
             } catch {
               // Malformed JSON — skip

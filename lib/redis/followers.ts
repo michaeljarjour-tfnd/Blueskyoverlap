@@ -129,40 +129,6 @@ export async function getOrFetchEngagement(
   return { set: engagers, stats, fromCache: false };
 }
 
-/**
- * Returns the count of the intersection of two follower sets.
- * Uses Redis SINTERCARD if both sets are cached, otherwise falls back to JS.
- */
-export async function intersectCount(
-  set1: Set<string>,
-  set2: Set<string>,
-  did1: string,
-  did2: string,
-  tier: SpeedTier
-): Promise<number> {
-  const redis = getRedis();
-
-  if (redis) {
-    try {
-      const count = await redis.sintercard(
-        2,
-        followerKey(did1, tier),
-        followerKey(did2, tier)
-      );
-      if (typeof count === 'number' && count > 0) return count;
-    } catch {
-      // Fall through to JS
-    }
-  }
-
-  let count = 0;
-  const [smaller, larger] = set1.size <= set2.size ? [set1, set2] : [set2, set1];
-  for (const did of smaller) {
-    if (larger.has(did)) count++;
-  }
-  return count;
-}
-
 /** Returns whether a DID's follower set is already in Redis cache. */
 export async function isCached(did: string, tier: SpeedTier): Promise<boolean> {
   const redis = getRedis();

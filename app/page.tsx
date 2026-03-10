@@ -211,6 +211,12 @@ export default function Home() {
         let buffer = '';
         let resultReceived = false;
 
+        // Client-side safety net: if the server never sends a result (timeout,
+        // crash, or network issue), cancel the stream and show an error.
+        const readTimeout = setTimeout(() => {
+          reader.cancel();
+        }, 90_000);
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -245,6 +251,8 @@ export default function Home() {
             }
           }
         }
+
+        clearTimeout(readTimeout);
 
         // Stream ended without a result — likely a server timeout
         if (!resultReceived) {

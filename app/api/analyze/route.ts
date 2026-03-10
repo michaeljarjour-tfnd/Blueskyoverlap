@@ -13,10 +13,18 @@ import type {
 } from '@/lib/types';
 
 // Race a promise against a timeout. On timeout, returns the fallback value.
+// Cancels the timer when the promise resolves first to avoid dangling timers.
 function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timerId: ReturnType<typeof setTimeout>;
+  const timer = new Promise<T>((resolve) => {
+    timerId = setTimeout(() => resolve(fallback), ms);
+  });
   return Promise.race([
-    promise,
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+    promise.then(
+      (v) => { clearTimeout(timerId); return v; },
+      (e) => { clearTimeout(timerId); throw e; }
+    ),
+    timer,
   ]);
 }
 
@@ -78,6 +86,19 @@ export async function POST(req: NextRequest) {
           abortController.abort();
         }
       };
+
+      // Send periodic heartbeat comments to keep the connection warm and force
+      // Vercel's edge CDN to flush buffered chunks to the client. This is
+      // critical for fast (cached) analyses that complete in < 2s — without
+      // the heartbeat, the edge may buffer the entire response and deliver it
+      // only after the TCP connection closes (causing the 90s client timeout).
+      const heartbeatInterval = setInterval(() => {
+        try {
+          controller.enqueue(new TextEncoder().encode(': ping\n\n'));
+        } catch {
+          clearInterval(heartbeatInterval);
+        }
+      }, 800);
 
       try {
         // ── 1. Resolve all profiles in parallel ───────────────────────────────
@@ -300,6 +321,7 @@ export async function POST(req: NextRequest) {
           cacheStatus,
           speedTier,
           intent,
+          overlapDetails: overlapDetailStore,
         };
 
         send({ type: 'result', data: result });
@@ -310,6 +332,12 @@ export async function POST(req: NextRequest) {
             : (err as Error).message ?? 'An unexpected error occurred';
         send({ type: 'error', message });
       } finally {
+        clearInterval(heartbeatInterval);
+        // Give the edge CDN ~200ms to flush the result/error event to the
+        // client before we close the stream. Without this delay, closing the
+        // stream immediately after enqueuing the result can race with the
+        // edge's buffer flush, causing the client to never receive the event.
+        await new Promise((r) => setTimeout(r, 200));
         controller.close();
       }
     },

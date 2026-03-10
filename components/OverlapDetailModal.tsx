@@ -7,6 +7,7 @@ import { formatFollowers } from '@/lib/analysis/interpret';
 interface Props {
   overlapId: string;
   type: 'followers' | 'engagement';
+  dids: string[];
   pairwiseOverlaps: PairwiseOverlap[];
   onClose: () => void;
 }
@@ -14,6 +15,7 @@ interface Props {
 export default function OverlapDetailModal({
   overlapId,
   type,
+  dids,
   pairwiseOverlaps,
   onClose,
 }: Props) {
@@ -26,26 +28,41 @@ export default function OverlapDetailModal({
   const overlap = pairwiseOverlaps.find((o) => o.id === overlapId);
 
   useEffect(() => {
+    if (!dids || dids.length === 0) {
+      setLoading(false);
+      setError(null);
+      setProfiles([]);
+      setTotal(0);
+      return;
+    }
+
     const fetchDetails = async () => {
       setLoading(true);
       setError(null);
 
       try {
-        // We don't have the DID samples readily available on the client.
-        // The modal asks the server to look them up from the overlap ID.
-        // For now we use a simple fetch with the overlap metadata.
-        // In a real implementation, we'd store the DID samples in component state
-        // and pass them here, but for simplicity we'll show a message.
-        setError(
-          'Drill-down requires the DID samples to be passed from the analysis result. ' +
-            'This will be wired up once the full analysis result includes overlap DIDs.'
-        );
+        const res = await fetch('/api/overlap-details', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dids }),
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json() as { profiles: BskyProfile[]; total: number; error?: string };
+        if (data.error) throw new Error(data.error);
+
+        setProfiles(data.profiles ?? []);
+        setTotal(data.total ?? dids.length);
+      } catch (err) {
+        setError((err as Error).message ?? 'Failed to load profiles');
       } finally {
         setLoading(false);
       }
     };
 
     fetchDetails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overlapId, type]);
 
   const filtered = profiles.filter(
@@ -54,6 +71,8 @@ export default function OverlapDetailModal({
       p.handle.toLowerCase().includes(query.toLowerCase()) ||
       (p.displayName ?? '').toLowerCase().includes(query.toLowerCase())
   );
+
+  const typeLabel = type === 'followers' ? 'Followers' : 'Engagers';
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -71,7 +90,7 @@ export default function OverlapDetailModal({
         >
           <div>
             <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--color-navy)' }}>
-              Shared {type === 'followers' ? 'Followers' : 'Engagers'}
+              Shared {typeLabel}
             </div>
             {overlap && (
               <div
@@ -79,6 +98,7 @@ export default function OverlapDetailModal({
                   fontSize: 12,
                   color: 'var(--color-text-muted)',
                   fontFamily: 'var(--font-mono)',
+                  marginTop: 2,
                 }}
               >
                 @{overlap.account1.handle} × @{overlap.account2.handle}
@@ -94,6 +114,7 @@ export default function OverlapDetailModal({
               cursor: 'pointer',
               color: 'var(--color-text-faint)',
               lineHeight: 1,
+              padding: '0 4px',
             }}
           >
             ×
@@ -225,8 +246,8 @@ export default function OverlapDetailModal({
               flexShrink: 0,
             }}
           >
-            Showing {filtered.length} of {total} shared{' '}
-            {type === 'followers' ? 'followers' : 'engagers'}
+            Showing {filtered.length} of {total} shared {typeLabel.toLowerCase()}
+            {total > 500 && ' (top 500 by follower count)'}
           </div>
         )}
       </div>

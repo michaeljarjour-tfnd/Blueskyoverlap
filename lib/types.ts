@@ -86,6 +86,11 @@ export interface IntentWeights {
   crossAppeal: number;
 }
 
+export interface OverlapDetailEntry {
+  followerDids: string[];
+  engagementDids: string[];
+}
+
 export interface AnalysisResult {
   profiles: BskyProfile[];
   pairwiseOverlaps: PairwiseOverlap[];
@@ -94,6 +99,8 @@ export interface AnalysisResult {
   cacheStatus: Record<string, 'hit' | 'miss'>;
   speedTier: SpeedTier;
   intent: AnalysisIntent;
+  /** DID samples for the drill-down modal, keyed by overlapId */
+  overlapDetails: Record<string, OverlapDetailEntry>;
 }
 
 // ── API request/response ───────────────────────────────────────────────────────

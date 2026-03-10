@@ -209,6 +209,7 @@ export default function Home() {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
+        let resultReceived = false;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -231,9 +232,11 @@ export default function Home() {
                   postProgress: event.postProgress,
                 });
               } else if (event.type === 'result') {
+                resultReceived = true;
                 setResult(event.data);
                 setPhase('results');
               } else if (event.type === 'error') {
+                resultReceived = true; // treat error as a terminal event too
                 setErrorMsg(event.message);
                 setPhase('error');
               }
@@ -241,6 +244,14 @@ export default function Home() {
               // Malformed JSON — skip
             }
           }
+        }
+
+        // Stream ended without a result — likely a server timeout
+        if (!resultReceived) {
+          setErrorMsg(
+            'The analysis timed out before completing. Try Quick or Balanced mode for large accounts — or run it again, since cached follower data makes retries much faster.'
+          );
+          setPhase('error');
         }
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {

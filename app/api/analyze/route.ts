@@ -9,7 +9,22 @@ import type {
   SseEvent,
   SpeedTier,
   AnalysisResult,
+  EngagementStats,
 } from '@/lib/types';
+
+// Race a promise against a timeout. On timeout, returns the fallback value.
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
+const EMPTY_ENGAGEMENT = {
+  set: new Set<string>(),
+  stats: { totalLikes: 0, totalReposts: 0, postsAnalyzed: 0 } as EngagementStats,
+  fromCache: false,
+};
 
 export const maxDuration = 60; // seconds — upgrade to 300 on Vercel Pro for complete tier
 
@@ -110,19 +125,23 @@ export async function POST(req: NextRequest) {
                 },
                 abortController.signal
               ),
-              // Stagger engagement fetches by 500ms per account so multiple large
-              // accounts don't all hammer the Bluesky API at exactly the same time.
+              // Stagger engagement fetches, and cap each at 35 s so a slow
+              // engagement fetch never blocks the follower-overlap result.
               (async () => {
                 if (idx > 0) await new Promise((r) => setTimeout(r, idx * 500));
-                return getOrFetchEngagement(
-                  profile.did,
-                  speedTier,
-                  maxPosts,
-                  (analyzed, total) => {
-                    postProgress[profile.did] = { analyzed, total };
-                    sendProgress(20);
-                  },
-                  abortController.signal
+                return withTimeout(
+                  getOrFetchEngagement(
+                    profile.did,
+                    speedTier,
+                    maxPosts,
+                    (analyzed, total) => {
+                      postProgress[profile.did] = { analyzed, total };
+                      sendProgress(20);
+                    },
+                    abortController.signal
+                  ),
+                  35_000,
+                  EMPTY_ENGAGEMENT
                 );
               })(),
             ]);

@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bluesky Audience Overlap Analyzer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f3f4f6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            color: #6b7280;
+            font-size: 14px;
+        }
+        
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+        }
+        
+        .card h2 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        
+        .input-group {
+            margin-bottom: 12px;
+        }
+        
+        .input-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 4px;
+            color: #374151;
+        }
+        
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .input-group input:disabled {
+            background: #f3f4f6;
+            cursor: not-allowed;
+        }
+        
+        .tip {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 8px;
+            margin-bottom: 12px;
+        }
+        
+        .btn {
+            margin-top: 16px;
+            padding: 12px 24px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+        }
+        
+        .btn:hover {
+            background: #2563eb;
+        }
+        
+        .btn:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        
+        .alert {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .alert-info {
+            background: #eff6ff;
+            color: #1e40af;
+        }
+        
+        .alert-error {
+            background: #fef2f2;
+            color: #991b1b;
+        }
+        
+        .results {
+            margin-top: 24px;
+        }
+        
+        .results h2 {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        
+        .account-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .account-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .account-name {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 4px;
+        }
+        
+        .account-handle {
+            font-size: 14px;
+            color: #6b7280;
+            margin-bottom: 12px;
+        }
+        
+        .account-followers {
+            font-size: 24px;
+            font-weight: bold;
+            color: #3b82f6;
+        }
+        
+        .account-label {
+            font-size: 12px;
+            color: #6b7280;
+        }
+        
+        .comparison {
+            background: white;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+        }
+        
+        .comparison h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .metric {
+            
+        }
+        
+        .metric-label {
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 4px;
+        }
+        
+        .metric-value {
+            font-size: 28px;
+            font-weight: bold;
+        }
+        
+        .breakdown-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        
+        .breakdown-card {
+            padding: 12px;
+            background: #f9fafb;
+            border-radius: 6px;
+        }
+        
+        .breakdown-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .breakdown-stat {
+            font-size: 12px;
+            color: #6b7280;
+        }
+        
+        .three-way {
+            background: white;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+        }
+        
+        .three-way h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        
+        .insights {
+            background: #eff6ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 24px;
+        }
+        
+        .insights h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #1e40af;
+        }
+        
+        .insights ul {
+            font-size: 14px;
+            color: #1e3a8a;
+            line-height: 1.6;
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Bluesky Audience Overlap Analyzer</h1>
+            <p>Analyze follower overlap between 2-3 Bluesky accounts. Paste handles or full profile URLs.</p>
+        </div>
+
+        <div class="card">
+            <h2>Enter Bluesky Handles</h2>
+            
+            <div class="input-group">
+                <label>Account 1</label>
+                <input type="text" id="handle1" placeholder="e.g., midimyers.com or full URL">
+            </div>
+            
+            <div class="input-group">
+                <label>Account 2</label>
+                <input type="text" id="handle2" placeholder="e.g., katelynburns.com or full URL">
+            </div>
+            
+            <div class="input-group">
+                <label>Account 3 (Optional)</label>
+                <input type="text" id="handle3" placeholder="e.g., rascal.news or full URL">
+            </div>
+            
+            <div class="tip">
+                💡 Tip: You can paste either handles (e.g., "midimyers.com") or full URLs (e.g., "https://bsky.app/profile/midimyers.com")
+            </div>
+            
+            <button class="btn" id="analyzeBtn" onclick="analyzeOverlap()">Analyze Overlap</button>
+            
+            <div id="progressDiv" style="display: none;" class="alert alert-info"></div>
+            <div id="errorDiv" style="display: none;" class="alert alert-error"></div>
+        </div>
+
+        <div id="resultsDiv"></div>
+    </div>
+
+    <script>
+        let isLoading = false;
+
+        function extractHandle(input) {
+            input = input.trim();
+            
+            // If it's a URL, extract the handle from it
+            if (input.includes('bsky.app/profile/')) {
+                const match = input.match(/bsky\.app\/profile\/([^\/?#]+)/);
+                if (match) {
+                    return match[1];
+                }
+            }
+            
+            // If it starts with @, remove it
+            if (input.startsWith('@')) {
+                return input.slice(1);
+            }
+            
+            return input;
+        }
+
+        function showProgress(message) {
+            const div = document.getElementById('progressDiv');
+            div.textContent = message;
+            div.style.display = 'block';
+        }
+
+        function hideProgress() {
+            document.getElementById('progressDiv').style.display = 'none';
+        }
+
+        function showError(message) {
+            const div = document.getElementById('errorDiv');
+            div.textContent = '❌ ' + message;
+            div.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('errorDiv').style.display = 'none';
+        }
+
+        async function getProfile(actor) {
+            try {
+                console.log('Fetching profile for:', actor);
+                const response = await fetch(
+                    `https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(actor)}`
+                );
+                
+                if (!response.ok) {
+                    throw new Error(`Profile not found: ${actor} (Status: ${response.status})`);
+                }
+                
+                const data = await response.json();
+                console.log('Profile fetched successfully:', data.handle);
+                return data;
+            } catch (err) {
+                console.error('Error in getProfile:', err);
+                throw new Error(`Could not fetch profile for "${actor}". Check the handle is correct.`);
+            }
+        }
+
+        async function fetchFollowers(actor, maxFollowers = null) {
+            const followers = new Set();
+            let cursor = null;
+            let page = 0;
+            
+            while (true) {
+                try {
+                    let url = `https://public.api.bsky.app/xrpc/app.bsky.graph.getFollowers?actor=${encodeURIComponent(actor)}&limit=100`;
+                    
+                    if (cursor) {
+                        url += `&cursor=${encodeURIComponent(cursor)}`;
+                    }
+                    
+                    const response = await fetch(url);
+                    
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch followers: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.followers) {
+                        data.followers.forEach(f => followers.add(f.did));
+                    }
+                    
+                    page++;
+                    showProgress(`Fetching ${actor}: ${followers.size.toLocaleString()} followers (page ${page})`);
+                    
+                    if (maxFollowers && followers.size >= maxFollowers) {
+                        break;
+                    }
+                    
+                    cursor = data.cursor;
+                    if (!cursor) break;
+                    
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                } catch (err) {
+                    console.error('Error fetching followers:', err);
+                    throw err;
+                }
+            }
+            
+            return followers;
+        }
+
+        function getInterpretation(jaccard) {
+            if (jaccard > 50) return { label: 'Very High', color: '#10b981', emoji: '⭐' };
+            if (jaccard > 30) return { label: 'High', color: '#3b82f6', emoji: '✅' };
+            if (jaccard > 15) return { label: 'Moderate', color: '#f59e0b', emoji: '📊' };
+            if (jaccard > 5) return { label: 'Low', color: '#ef4444', emoji: '📉' };
+            return { label: 'Minimal', color: '#6b7280', emoji: '⚪' };
+        }
+
+        async function analyzeOverlap() {
+            if (isLoading) return;
+            
+            isLoading = true;
+            const btn = document.getElementById('analyzeBtn');
+            btn.disabled = true;
+            btn.textContent = 'Analyzing...';
+            
+            hideError();
+            hideProgress();
+            document.getElementById('resultsDiv').innerHTML = '';
+            
+            try {
+                // Get handles
+                const handle1 = document.getElementById('handle1').value;
+                const handle2 = document.getElementById('handle2').value;
+                const handle3 = document.getElementById('handle3').value;
+                
+                const validHandles = [handle1, handle2, handle3]
+                    .filter(h => h.trim() !== '')
+                    .map(h => extractHandle(h));
+                
+                console.log('Extracted handles:', validHandles);
+                
+                if (validHandles.length < 2) {
+                    throw new Error('Please enter at least 2 handles');
+                }
+                
+                // Fetch profiles
+                showProgress('Fetching profiles...');
+                const profiles = [];
+                for (const handle of validHandles) {
+                    const profile = await getProfile(handle);
+                    profiles.push(profile);
+                }
+                
+                // Fetch followers
+                showProgress('Fetching followers...');
+                const followerSets = [];
+                for (let i = 0; i < profiles.length; i++) {
+                    const followers = await fetchFollowers(profiles[i].did);
+                    followerSets.push(followers);
+                }
+                
+                // Calculate overlaps
+                showProgress('Calculating overlaps...');
+                
+                const pairwiseOverlaps = [];
+                
+                for (let i = 0; i < profiles.length; i++) {
+                    for (let j = i + 1; j < profiles.length; j++) {
+                        const overlap = new Set([...followerSets[i]].filter(x => followerSets[j].has(x)));
+                        const totalUnique = new Set([...followerSets[i], ...followerSets[j]]);
+                        const jaccardIndex = (overlap.size / totalUnique.size) * 100;
+                        
+                        pairwiseOverlaps.push({
+                            account1: profiles[i],
+                            account2: profiles[j],
+                            followers1: followerSets[i].size,
+                            followers2: followerSets[j].size,
+                            overlap: overlap.size,
+                            overlapPct1: (overlap.size / followerSets[i].size) * 100,
+                            overlapPct2: (overlap.size / followerSets[j].size) * 100,
+                            jaccard: jaccardIndex,
+                            unique1: followerSets[i].size - overlap.size,
+                            unique2: followerSets[j].size - overlap.size
+                        });
+                    }
+                }
+                
+                // 3-way overlap
+                let threeWayOverlap = null;
+                if (profiles.length === 3) {
+                    const overlap3 = new Set(
+                        [...followerSets[0]].filter(x => 
+                            followerSets[1].has(x) && followerSets[2].has(x)
+                        )
+                    );
+                    threeWayOverlap = overlap3.size;
+                }
+                
+                displayResults(profiles, followerSets, pairwiseOverlaps, threeWayOverlap);
+                hideProgress();
+                
+            } catch (err) {
+                console.error('Analysis error:', err);
+                showError(err.message);
+            } finally {
+                isLoading = false;
+                btn.disabled = false;
+                btn.textContent = 'Analyze Overlap';
+            }
+        }
+
+        function displayResults(profiles, followerSets, pairwiseOverlaps, threeWayOverlap) {
+            const resultsDiv = document.getElementById('resultsDiv');
+            
+            let html = '<div class="results"><h2>📊 Results</h2>';
+            
+            // Account summaries
+            html += '<div class="account-grid">';
+            profiles.forEach((profile, idx) => {
+                html += `
+                    <div class="account-card">
+                        <div class="account-name">${profile.displayName || profile.handle}</div>
+                        <div class="account-handle">@${profile.handle}</div>
+                        <div class="account-followers">${followerSets[idx].size.toLocaleString()}</div>
+                        <div class="account-label">followers</div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            
+            // Pairwise comparisons
+            pairwiseOverlaps.forEach(comp => {
+                const interp = getInterpretation(comp.jaccard);
+                
+                html += `
+                    <div class="comparison">
+                        <h3>${comp.account1.displayName} ↔ ${comp.account2.displayName}</h3>
+                        
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <div class="metric-label">Shared Followers</div>
+                                <div class="metric-value" style="color: #10b981;">${comp.overlap.toLocaleString()}</div>
+                            </div>
+                            
+                            <div class="metric">
+                                <div class="metric-label">Jaccard Similarity</div>
+                                <div class="metric-value" style="color: ${interp.color};">${comp.jaccard.toFixed(1)}%</div>
+                            </div>
+                            
+                            <div class="metric">
+                                <div class="metric-label">Interpretation</div>
+                                <div class="metric-value" style="color: ${interp.color}; font-size: 18px;">${interp.emoji} ${interp.label}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="breakdown-grid">
+                            <div class="breakdown-card">
+                                <div class="breakdown-title">${comp.account1.displayName}</div>
+                                <div class="breakdown-stat">Unique: ${comp.unique1.toLocaleString()} (${((comp.unique1 / comp.followers1) * 100).toFixed(1)}%)</div>
+                                <div class="breakdown-stat">Shared: ${comp.overlap.toLocaleString()} (${comp.overlapPct1.toFixed(1)}%)</div>
+                            </div>
+                            
+                            <div class="breakdown-card">
+                                <div class="breakdown-title">${comp.account2.displayName}</div>
+                                <div class="breakdown-stat">Unique: ${comp.unique2.toLocaleString()} (${((comp.unique2 / comp.followers2) * 100).toFixed(1)}%)</div>
+                                <div class="breakdown-stat">Shared: ${comp.overlap.toLocaleString()} (${comp.overlapPct2.toFixed(1)}%)</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            // 3-way overlap
+            if (threeWayOverlap !== null) {
+                html += `
+                    <div class="three-way">
+                        <h3>🎯 Three-Way Overlap</h3>
+                        <div style="font-size: 14px; color: #6b7280; margin-bottom: 8px;">
+                            Followers who follow ALL THREE accounts:
+                        </div>
+                        <div style="font-size: 36px; font-weight: bold; color: #8b5cf6;">
+                            ${threeWayOverlap.toLocaleString()}
+                        </div>
+                        <div style="font-size: 12px; color: #6b7280; margin-top: 8px;">
+                            This is your core shared audience
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Insights
+            html += '<div class="insights"><h3>💡 Insights for Trustfund</h3><ul>';
+            
+            if (pairwiseOverlaps[0].jaccard > 30) {
+                html += '<li>High overlap suggests these creators compete for the same audience - collaborations should focus on complementary content</li>';
+            }
+            if (pairwiseOverlaps[0].jaccard >= 15 && pairwiseOverlaps[0].jaccard <= 30) {
+                html += '<li>Moderate overlap is ideal for newsletter bundles - shared interest but each brings new readers</li>';
+            }
+            if (pairwiseOverlaps[0].jaccard < 15) {
+                html += '<li>Low overlap means great potential for cross-promotion - reach entirely new audiences</li>';
+            }
+            if (threeWayOverlap && threeWayOverlap > 100) {
+                html += `<li>Strong 3-way core audience (${threeWayOverlap.toLocaleString()}) makes this a great bundle opportunity</li>`;
+            }
+            
+            html += '</ul></div>';
+            html += '</div>';
+            
+            resultsDiv.innerHTML = html;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collapse Preview</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'DM Sans', system-ui, sans-serif;
+            background: #F4F8FC;
+            padding: 40px 20px;
+            color: #04182B;
+        }
+
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 48px;
+        }
+
+        h2 {
+            font-size: 11px;
+            font-weight: 600;
+            color: #8a9ab0;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 12px;
+        }
+
+        /* ── Card shell ── */
+        .card {
+            background: white;
+            border: 1px solid #E3EBF3;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .card-inner {
+            padding: 24px;
+        }
+
+        /* ── Full form ── */
+        .form-title {
+            font-size: 22px;
+            font-weight: 600;
+            color: #04182B;
+            margin-bottom: 24px;
+        }
+
+        .field-label {
+            font-size: 13px;
+            font-weight: 500;
+            color: #04182B;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .field-label-optional {
+            font-size: 13px;
+            color: #8a9ab0;
+            font-weight: 400;
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #E3EBF3;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: 'DM Sans', sans-serif;
+            color: #04182B;
+            background: #fafbfc;
+            margin-bottom: 16px;
+        }
+
+        .input-field:last-of-type { margin-bottom: 0; }
+
+        .divider { border: none; border-top: 1px solid #E3EBF3; margin: 20px 0; }
+
+        .depth-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #8a9ab0;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 10px;
+        }
+
+        .tier {
+            border: 1px solid #E3EBF3;
+            border-radius: 4px;
+            padding: 12px 14px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .tier.selected {
+            border-color: #034EAD;
+            background: #F4F8FC;
+        }
+
+        .tier-radio {
+            width: 16px;
+            height: 16px;
+            margin-top: 2px;
+            flex-shrink: 0;
+            accent-color: #034EAD;
+        }
+
+        .tier-name {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .tier-mono {
+            font-family: 'DM Mono', monospace;
+            font-weight: 400;
+            color: #5a6a7a;
+        }
+
+        .tier-desc {
+            font-size: 12px;
+            color: #5a6a7a;
+            margin-top: 2px;
+        }
+
+        .tier-badge {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: #034EAD;
+            color: #F8FFFF;
+            padding: 2px 7px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+
+        /* ── Analyze button ── */
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border-radius: 4px;
+            font-size: 15px;
+            font-weight: 600;
+            font-family: 'DM Sans', sans-serif;
+            border: none;
+            cursor: pointer;
+            margin-top: 16px;
+        }
+
+        .btn-analyze  { background: #04182B; color: #F8FFFF; }
+        .btn-analyzing { background: #8a9ab0; color: white; cursor: default; }
+
+        /* ── Collapsed summary strip ── */
+        .summary-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            border-bottom: 1px solid #E3EBF3;
+            gap: 12px;
+        }
+
+        .summary-handles {
+            font-size: 13px;
+            font-weight: 500;
+            color: #04182B;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .summary-handles .separator {
+            color: #8a9ab0;
+            margin: 0 6px;
+        }
+
+        .summary-tier {
+            font-size: 12px;
+            color: #8a9ab0;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .summary-tier strong {
+            color: #5a6a7a;
+            font-weight: 500;
+        }
+
+        .cancel-btn {
+            font-size: 12px;
+            color: #8a9ab0;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px 0;
+            flex-shrink: 0;
+            font-family: 'DM Sans', sans-serif;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+
+        .cancel-btn:hover { color: #04182B; }
+
+        /* ── Progress box ── */
+        .progress-box {
+            background: #F4F8FC;
+            border: 1px solid #E3EBF3;
+            border-radius: 6px;
+            padding: 20px 24px;
+        }
+
+        .progress-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            height: 18px;
+            margin-bottom: 16px;
+        }
+
+        .star {
+            font-family: 'DM Mono', monospace;
+            font-size: 14px;
+            color: #034EAD;
+            width: 14px;
+            text-align: center;
+            line-height: 18px;
+            flex-shrink: 0;
+        }
+
+        .word-wrap {
+            position: relative;
+            overflow: hidden;
+            height: 18px;
+            flex: 1;
+        }
+
+        .word-inner {
+            position: absolute;
+            left: 0; top: 0;
+            font-size: 13px;
+            font-weight: 500;
+            color: #04182B;
+            line-height: 18px;
+            white-space: nowrap;
+        }
+
+        .bar-label { font-size: 11px; color: #8a9ab0; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+        .bar-track { background: #E3EBF3; border-radius: 2px; height: 3px; overflow: hidden; margin-bottom: 10px; }
+        .bar-fill-blue { background: #034EAD; height: 3px; border-radius: 2px; transition: width 0.3s ease; }
+        .bar-fill-dark { background: #04182B; height: 3px; border-radius: 2px; transition: width 0.3s ease; }
+
+        .tab-note {
+            margin-top: 10px;
+            font-size: 11px;
+            color: #8a9ab0;
+        }
+
+        /* ── Toggle button (for preview only) ── */
+        .toggle-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .toggle-btn {
+            padding: 6px 14px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            font-family: 'DM Sans', sans-serif;
+            cursor: pointer;
+            border: 1px solid #E3EBF3;
+            background: white;
+            color: #5a6a7a;
+        }
+
+        .toggle-btn.active {
+            background: #04182B;
+            color: white;
+            border-color: #04182B;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- ── Before: full form ── -->
+    <div>
+        <h2>Before — form open</h2>
+        <div class="card">
+            <div class="card-inner">
+                <div class="form-title">Enter Bluesky Handles</div>
+
+                <div class="field-label">Account 1</div>
+                <input class="input-field" value="aftermath.site" readonly>
+
+                <div class="field-label" style="margin-top: 16px;">Account 2</div>
+                <input class="input-field" value="404media.co" readonly>
+
+                <div class="field-label" style="margin-top: 16px;">
+                    Account 3 <span class="field-label-optional">(optional)</span>
+                </div>
+                <input class="input-field" placeholder="e.g., trustfnd.com" readonly>
+
+                <hr class="divider">
+
+                <div class="depth-label">Analysis Depth</div>
+
+                <div class="tier">
+                    <input type="radio" class="tier-radio" name="tier-before">
+                    <div style="flex: 1;">
+                        <div class="tier-name">Quick <span class="tier-mono">~60s</span></div>
+                        <div class="tier-desc">2,000 followers + 50 recent posts · ±2% accuracy</div>
+                    </div>
+                    <span class="tier-badge">Recommended</span>
+                </div>
+
+                <div class="tier">
+                    <input type="radio" class="tier-radio" name="tier-before">
+                    <div>
+                        <div class="tier-name">Balanced <span class="tier-mono">~2 min</span></div>
+                        <div class="tier-desc">5,000 followers + 100 recent posts · ±1.4% accuracy</div>
+                    </div>
+                </div>
+
+                <div class="tier selected">
+                    <input type="radio" class="tier-radio" name="tier-before" checked>
+                    <div>
+                        <div class="tier-name">Complete <span class="tier-mono">30+ min</span></div>
+                        <div class="tier-desc">All followers + 200 posts · 100% accurate · Very slow for large accounts</div>
+                    </div>
+                </div>
+
+                <button class="btn btn-analyze">Analyze</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── After: collapsed + progress ── -->
+    <div>
+        <h2>After — analysis running</h2>
+
+        <!-- Toggle for handles count -->
+        <div class="toggle-row">
+            <button class="toggle-btn active" onclick="setHandles(2, this)">2 handles</button>
+            <button class="toggle-btn" onclick="setHandles(3, this)">3 handles</button>
+        </div>
+
+        <div class="card">
+            <!-- Collapsed summary strip -->
+            <div class="summary-strip">
+                <div class="summary-handles" id="summaryHandles">
+                    <span>aftermath.site</span>
+                    <span class="separator">×</span>
+                    <span>404media.co</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 14px; flex-shrink: 0;">
+                    <span class="summary-tier"><strong>Complete</strong></span>
+                    <button class="cancel-btn">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Progress -->
+            <div class="card-inner">
+                <div class="progress-box">
+                    <div class="progress-row">
+                        <span class="star" id="star">·</span>
+                        <div class="word-wrap"><span class="word-inner" id="word">Fetching...</span></div>
+                    </div>
+                    <div>
+                        <div class="bar-label">Followers</div>
+                        <div class="bar-track"><div class="bar-fill-blue" id="barFol" style="width: 0%"></div></div>
+                    </div>
+                    <div>
+                        <div class="bar-label">Posts</div>
+                        <div class="bar-track"><div class="bar-fill-dark" id="barPost" style="width: 0%"></div></div>
+                    </div>
+                    <div class="tab-note">Keep this tab open — the analysis runs here in your browser.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // Toggle handles display
+    function setHandles(n, btn) {
+        document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const el = document.getElementById('summaryHandles');
+        if (n === 2) {
+            el.innerHTML = '<span>aftermath.site</span><span class="separator">×</span><span>404media.co</span>';
+        } else {
+            el.innerHTML = '<span>aftermath.site</span><span class="separator">×</span><span>404media.co</span><span class="separator">×</span><span>trustfnd.com</span>';
+        }
+    }
+
+    // Star + word animation
+    const words = [
+        'Fetching','Indexing','Comparing','Scanning','Correlating',
+        'Triangulating','Crunching','Sleuthing','Deduplicating','Synthesizing'
+    ];
+    const starFrames = ['·','*','✶','✺','✶','*','·'];
+    let deck = shuffle([...words]);
+    let starIdx = 0;
+    let typeTimer = null;
+
+    function shuffle(arr) {
+        const a = [...arr];
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+    }
+
+    function typeWord(text) {
+        if (typeTimer) clearInterval(typeTimer);
+        const el = document.getElementById('word');
+        el.textContent = '';
+        const full = text + '...';
+        let i = 0;
+        typeTimer = setInterval(() => {
+            el.textContent = full.slice(0, ++i);
+            if (i >= full.length) clearInterval(typeTimer);
+        }, 40);
+    }
+
+    function nextWord() {
+        if (!deck.length) deck = shuffle([...words]);
+        const w = deck.shift();
+        starIdx = 0;
+        document.getElementById('star').textContent = starFrames[0];
+        typeWord(w);
+    }
+
+    nextWord();
+    setInterval(nextWord, 1800);
+    setInterval(() => {
+        starIdx = (starIdx + 1) % starFrames.length;
+        document.getElementById('star').textContent = starFrames[starIdx];
+    }, 500);
+
+    // Progress bars
+    let folPct = 0, postPct = 0;
+    setInterval(() => {
+        folPct  = Math.min(folPct  + 0.3, 100);
+        postPct = Math.min(postPct + 0.5, 100);
+        document.getElementById('barFol').style.width  = folPct  + '%';
+        document.getElementById('barPost').style.width = postPct + '%';
+        if (folPct >= 100 && postPct >= 100) { folPct = 0; postPct = 0; }
+    }, 50);
+</script>
+</body>
+</html>

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Indicator Preview</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'DM Sans', system-ui, sans-serif;
+            background: #F4F8FC;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        h1 {
+            font-size: 13px;
+            font-weight: 500;
+            color: #8a9ab0;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 32px;
+            text-align: center;
+        }
+
+        .section-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #c0ccd8;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 12px;
+        }
+
+        .cards {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+            margin-bottom: 32px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #E3EBF3;
+            border-radius: 8px;
+            padding: 24px;
+            width: 220px;
+        }
+
+        .card-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #8a9ab0;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 20px;
+        }
+
+        .progress-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            height: 18px;
+            margin-bottom: 16px;
+        }
+
+        .bars { display: flex; flex-direction: column; gap: 10px; }
+        .bar-label {
+            font-size: 11px;
+            color: #8a9ab0;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 5px;
+        }
+        .bar-track {
+            background: #E3EBF3;
+            border-radius: 2px;
+            height: 3px;
+            overflow: hidden;
+        }
+        .bar-fill-blue { background: #034EAD; height: 3px; border-radius: 2px; }
+        .bar-fill-dark { background: #04182B; height: 3px; border-radius: 2px; }
+
+        .word-wrap {
+            position: relative;
+            overflow: hidden;
+            height: 18px;
+            flex: 1;
+        }
+        .word-inner {
+            position: absolute;
+            left: 0; top: 0;
+            font-size: 13px;
+            font-weight: 500;
+            color: #04182B;
+            line-height: 18px;
+            white-space: nowrap;
+        }
+
+        /* Shared star style */
+        .star {
+            font-family: 'DM Mono', monospace;
+            font-size: 14px;
+            color: #034EAD;
+            width: 16px;
+            text-align: center;
+            flex-shrink: 0;
+            line-height: 18px;
+        }
+    </style>
+</head>
+<body>
+<div>
+    <h1>ASCII star options</h1>
+
+    <div class="section-label">Star options</div>
+    <div class="cards">
+
+        <!-- Option A: Pulsing weight ✶ ✸ ✺ ✸ -->
+        <div class="card">
+            <div class="card-label">A · Pulsing weight</div>
+            <div class="progress-row">
+                <span class="star" id="starA">✶</span>
+                <div class="word-wrap"><span class="word-inner" id="wordA"></span></div>
+            </div>
+            <div class="bars">
+                <div><div class="bar-label">Followers</div><div class="bar-track"><div class="bar-fill-blue" id="barAa" style="width:0%"></div></div></div>
+                <div><div class="bar-label">Posts</div><div class="bar-track"><div class="bar-fill-dark" id="barAb" style="width:0%"></div></div></div>
+            </div>
+        </div>
+
+        <!-- Option B: Twinkle · * ✦ * · -->
+        <div class="card">
+            <div class="card-label">B · Twinkle</div>
+            <div class="progress-row">
+                <span class="star" id="starB">·</span>
+                <div class="word-wrap"><span class="word-inner" id="wordB"></span></div>
+            </div>
+            <div class="bars">
+                <div><div class="bar-label">Followers</div><div class="bar-track"><div class="bar-fill-blue" id="barBa" style="width:0%"></div></div></div>
+                <div><div class="bar-label">Posts</div><div class="bar-track"><div class="bar-fill-dark" id="barBb" style="width:0%"></div></div></div>
+            </div>
+        </div>
+
+        <!-- Option C: Rotating + × -->
+        <div class="card">
+            <div class="card-label">C · Rotating cross</div>
+            <div class="progress-row">
+                <span class="star" id="starC">+</span>
+                <div class="word-wrap"><span class="word-inner" id="wordC"></span></div>
+            </div>
+            <div class="bars">
+                <div><div class="bar-label">Followers</div><div class="bar-track"><div class="bar-fill-blue" id="barCa" style="width:0%"></div></div></div>
+                <div><div class="bar-label">Posts</div><div class="bar-track"><div class="bar-fill-dark" id="barCb" style="width:0%"></div></div></div>
+            </div>
+        </div>
+
+        <!-- Option D: Fill/unfill ✧ ✦ -->
+        <div class="card">
+            <div class="card-label">D · Fill / unfill</div>
+            <div class="progress-row">
+                <span class="star" id="starD">✧</span>
+                <div class="word-wrap"><span class="word-inner" id="wordD"></span></div>
+            </div>
+            <div class="bars">
+                <div><div class="bar-label">Followers</div><div class="bar-track"><div class="bar-fill-blue" id="barDa" style="width:0%"></div></div></div>
+                <div><div class="bar-label">Posts</div><div class="bar-track"><div class="bar-fill-dark" id="barDb" style="width:0%"></div></div></div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    const words = [
+        'Fetching', 'Triangulating', 'Extrapolating', 'Sleuthing',
+        'Crunching', 'Deduplicating', 'Correlating', 'Spelunking',
+        'Scrutinizing', 'Synthesizing', 'Disambiguating', 'Obsessing'
+    ];
+
+    // Shared shuffled deck typewriter
+    let deck = shuffle([...words]);
+    let lastWord = null;
+
+    function shuffle(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    }
+
+    const wordEls = ['wordA','wordB','wordC','wordD'].map(id => document.getElementById(id));
+    let typeTimers = [null, null, null, null];
+
+    function typeWord(text, el, timerIdx) {
+        if (typeTimers[timerIdx]) clearInterval(typeTimers[timerIdx]);
+        el.textContent = '';
+        const full = text + '...';
+        let i = 0;
+        typeTimers[timerIdx] = setInterval(() => {
+            el.textContent = full.slice(0, ++i);
+            if (i >= full.length) clearInterval(typeTimers[timerIdx]);
+        }, 40);
+    }
+
+    function nextWord() {
+        if (!deck.length) deck = shuffle([...words]);
+        // avoid same word as last
+        if (deck[0] === lastWord && deck.length > 1) {
+            const swap = Math.floor(Math.random() * (deck.length - 1)) + 1;
+            [deck[0], deck[swap]] = [deck[swap], deck[0]];
+        }
+        const w = deck.shift();
+        lastWord = w;
+        wordEls.forEach((el, i) => typeWord(w, el, i));
+    }
+
+    nextWord();
+    setInterval(nextWord, 1800);
+
+    // A: Pulsing weight ✶ ✸ ✺ ✸
+    const framesA = ['✶','✸','✺','✸'];
+    let idxA = 0;
+    const elA = document.getElementById('starA');
+    setInterval(() => { elA.textContent = framesA[idxA = (idxA + 1) % framesA.length]; }, 300);
+
+    // B: Twinkle · * ✦ ✺ ✦ * ·
+    const framesB = ['·','*','✶','✺','✶','*','·'];
+    let idxB = 0;
+    const elB = document.getElementById('starB');
+    setInterval(() => { elB.textContent = framesB[idxB = (idxB + 1) % framesB.length]; }, 320);
+
+    // C: Rotating + ×  (faster — it's only 2 frames so needs speed to read as motion)
+    const framesC = ['+','×'];
+    let idxC = 0;
+    const elC = document.getElementById('starC');
+    setInterval(() => { elC.textContent = framesC[idxC = (idxC + 1) % framesC.length]; }, 200);
+
+    // D: Fill/unfill ✧ ✦  (slow blink)
+    const framesD = ['✧','✦'];
+    let idxD = 0;
+    const elD = document.getElementById('starD');
+    setInterval(() => { elD.textContent = framesD[idxD = (idxD + 1) % framesD.length]; }, 600);
+
+    // Animate bars
+    let pct = 0;
+    setInterval(() => {
+        pct = (pct + 0.4) % 101;
+        const p = Math.min(pct, 100);
+        ['barAa','barBa','barCa','barDa'].forEach(id => document.getElementById(id).style.width = p + '%');
+        ['barAb','barBb','barCb','barDb'].forEach(id => document.getElementById(id).style.width = Math.min(p * 0.7, 100) + '%');
+    }, 50);
+</script>
+</body>
+</html>

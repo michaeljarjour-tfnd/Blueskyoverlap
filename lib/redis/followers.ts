@@ -62,7 +62,7 @@ export async function getOrFetchFollowers(
         // Store in Redis in chunks (SADD has a practical limit)
         const CHUNK = 2000;
         for (let i = 0; i < members.length; i += CHUNK) {
-          await redis.sadd(key, ...members.slice(i, i + CHUNK));
+          await redis.sadd(key, ...(members.slice(i, i + CHUNK) as [string, ...string[]]));
         }
         await redis.expire(key, TTL_SECONDS);
         await redis.hset(metaKey(did, tier), {
@@ -117,7 +117,7 @@ export async function getOrFetchEngagement(
         // Chunk to avoid oversized Redis requests (was missing chunking)
         const CHUNK = 2000;
         for (let i = 0; i < members.length; i += CHUNK) {
-          await redis.sadd(key, ...members.slice(i, i + CHUNK));
+          await redis.sadd(key, ...(members.slice(i, i + CHUNK) as [string, ...string[]]));
         }
         await redis.expire(key, TTL_SECONDS);
       } catch {

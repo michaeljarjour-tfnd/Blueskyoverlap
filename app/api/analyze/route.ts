@@ -16,9 +16,9 @@ export const maxDuration = 60; // seconds — upgrade to 300 on Vercel Pro for c
 const MAX_OVERLAP_SAMPLE = 500;
 
 const SPEED_CONFIG: Record<SpeedTier, { maxFollowers: number | null; maxPosts: number }> = {
-  quick:    { maxFollowers: 2000,  maxPosts: 50 },
-  balanced: { maxFollowers: 5000,  maxPosts: 100 },
-  complete: { maxFollowers: null,  maxPosts: 200 },
+  quick:    { maxFollowers: 2000,  maxPosts: 20 },
+  balanced: { maxFollowers: 5000,  maxPosts: 35 },
+  complete: { maxFollowers: null,  maxPosts: 60 },
 };
 
 // ── SSE helpers ────────────────────────────────────────────────────────────────

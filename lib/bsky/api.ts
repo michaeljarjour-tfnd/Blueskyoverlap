@@ -20,10 +20,10 @@ export async function fetchWithRetry(url: string, signal?: AbortSignal): Promise
 
       if (res.status === 429) {
         const retryAfter = res.headers.get('Retry-After');
-        // Respect server's Retry-After, fall back to exponential backoff
+        // Cap at 5 s — we can't afford a 30-60 s backoff inside a 60 s Vercel function
         const delay = retryAfter
-          ? parseInt(retryAfter, 10) * 1000
-          : Math.min(1000 * 2 ** attempt, 30_000);
+          ? Math.min(parseInt(retryAfter, 10) * 1000, 5_000)
+          : Math.min(1000 * 2 ** attempt, 5_000);
         await sleep(delay);
         continue;
       }

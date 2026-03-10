@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import type { AnalysisResult, BskyProfile, PairwiseOverlap } from '@/lib/types';
+import type { AnalysisResult, BskyProfile, PairwiseOverlap, ThreeWayOverlap } from '@/lib/types';
 import { getInterpretation, formatFollowers } from '@/lib/analysis/interpret';
-import HeatmapMatrix from './HeatmapMatrix';
 import OverlapDetailModal from './OverlapDetailModal';
 
 interface Props {
@@ -440,6 +439,90 @@ function PairHeading({ overlap }: { overlap: PairwiseOverlap }) {
   );
 }
 
+// ── Multi-account heading (3-way hero) ─────────────────────────────────────────
+
+function MultiHeading({
+  profiles,
+  totalAccounts,
+}: {
+  profiles: BskyProfile[];
+  totalAccounts: number;
+}) {
+  const names = profiles.map((p) => p.displayName || p.handle);
+  return (
+    <h2
+      style={{
+        fontFamily: 'var(--font-sans)',
+        fontSize: 20,
+        fontWeight: 700,
+        color: 'var(--color-navy)',
+        letterSpacing: '-0.01em',
+        margin: '0 0 4px',
+      }}
+    >
+      {names.map((name, i) => (
+        <span key={i}>
+          {i > 0 && (
+            <span style={{ color: 'var(--color-text-faint)', fontWeight: 400 }}> × </span>
+          )}
+          {name}
+        </span>
+      ))}
+    </h2>
+  );
+}
+
+// ── Three-way overlap hero cards ───────────────────────────────────────────────
+
+function ThreeWayOverlapCards({
+  threeWay,
+  totalAccounts,
+  onDrillDown,
+}: {
+  threeWay: ThreeWayOverlap;
+  totalAccounts: number;
+  onDrillDown: (id: string, type: 'followers' | 'engagement') => void;
+}) {
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <MultiHeading profiles={threeWay.profiles} totalAccounts={totalAccounts} />
+      {totalAccounts > 3 && (
+        <div
+          style={{
+            fontSize: 12,
+            color: 'var(--color-text-faint)',
+            marginBottom: 14,
+            fontStyle: 'italic',
+          }}
+        >
+          Showing 3-way overlap for the first 3 accounts
+        </div>
+      )}
+      {totalAccounts === 3 && <div style={{ marginBottom: 14 }} />}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <OverlapCard
+          type="followers"
+          sharedCount={threeWay.follower}
+          jaccard={threeWay.followerJaccard}
+          profiles={threeWay.profiles}
+          sharedPcts={threeWay.followerPcts}
+          uniquePcts={threeWay.followerPcts.map((p) => 100 - p)}
+          onDrillDown={() => onDrillDown('three-way', 'followers')}
+        />
+        <OverlapCard
+          type="engagement"
+          sharedCount={threeWay.engagement}
+          jaccard={threeWay.engagementJaccard}
+          profiles={threeWay.profiles}
+          sharedPcts={threeWay.engagementPcts}
+          uniquePcts={threeWay.engagementPcts.map((p) => 100 - p)}
+          onDrillDown={() => onDrillDown('three-way', 'engagement')}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── Main results section ───────────────────────────────────────────────────────
 
 export default function ResultsSection({ result }: Props) {
@@ -459,7 +542,10 @@ export default function ResultsSection({ result }: Props) {
   };
 
   const isSinglePair = profiles.length === 2;
-  const isMulti = profiles.length > 2;
+  const isMulti = profiles.length >= 3;
+
+  // Sort pairs by follower Jaccard descending (done once, stable)
+  const sortedPairs = [...pairwiseOverlaps].sort((a, b) => b.followerJaccard - a.followerJaccard);
 
   return (
     <div>
@@ -474,98 +560,29 @@ export default function ResultsSection({ result }: Props) {
         </div>
       )}
 
-      {/* ── Multi-account view: collapsible pair accordion ─────────────────── */}
-      {isMulti && (
-        <div style={{ marginBottom: 24 }}>
-          {/* Heatmap for a quick visual overview */}
-          <div className="section-label" style={{ marginBottom: 12 }}>
-            Audience Overlap Matrix
-          </div>
-          <div className="card" style={{ padding: 24, marginBottom: 24 }}>
-            <HeatmapMatrix profiles={profiles} pairwiseOverlaps={pairwiseOverlaps} />
-          </div>
+      {/* ── Multi-account hero: three-way (or N-way capped at 3) overlap ─────── */}
+      {isMulti && threeWayOverlap && (
+        <ThreeWayOverlapCards
+          threeWay={threeWayOverlap}
+          totalAccounts={profiles.length}
+          onDrillDown={handleDrillDown}
+        />
+      )}
 
+      {/* ── Multi-account: collapsible pair combinations ─────────────────────── */}
+      {isMulti && sortedPairs.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
           <div className="section-label" style={{ marginBottom: 12 }}>
             Pair Combinations
           </div>
-          {pairwiseOverlaps
-            .sort((a, b) => b.followerJaccard - a.followerJaccard)
-            .map((o, i) => (
-              <CollapsiblePair
-                key={o.id}
-                overlap={o}
-                defaultOpen={i === 0}
-                onDrillDown={handleDrillDown}
-              />
-            ))}
-        </div>
-      )}
-
-      {/* ── Three-way overlap (exactly 3 accounts) ─────────────────────────── */}
-      {threeWayOverlap && profiles.length === 3 && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
-          {threeWayOverlap.follower > 0 && (
-            <div
-              style={{
-                background: '#fff',
-                border: '1px solid var(--color-border)',
-                borderRadius: 6,
-                padding: '24px 22px',
-                textAlign: 'center',
-              }}
-            >
-              <div className="section-label" style={{ marginBottom: 12 }}>
-                Three-Way Follower Overlap
-              </div>
-              <div
-                style={{
-                  fontSize: 48,
-                  fontWeight: 400,
-                  color: 'var(--color-blue)',
-                  fontFamily: 'var(--font-mono)',
-                  letterSpacing: '-0.03em',
-                  lineHeight: 1,
-                  marginBottom: 8,
-                }}
-              >
-                {threeWayOverlap.follower.toLocaleString()}
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-                {profiles.map((p) => p.displayName || p.handle).join(', ')}
-              </div>
-            </div>
-          )}
-          {threeWayOverlap.engagement > 0 && (
-            <div
-              style={{
-                background: '#fff',
-                border: '1px solid var(--color-border)',
-                borderRadius: 6,
-                padding: '24px 22px',
-                textAlign: 'center',
-              }}
-            >
-              <div className="section-label" style={{ marginBottom: 12 }}>
-                Three-Way Engagement Overlap
-              </div>
-              <div
-                style={{
-                  fontSize: 48,
-                  fontWeight: 400,
-                  color: 'var(--color-blue)',
-                  fontFamily: 'var(--font-mono)',
-                  letterSpacing: '-0.03em',
-                  lineHeight: 1,
-                  marginBottom: 8,
-                }}
-              >
-                {threeWayOverlap.engagement.toLocaleString()}
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-                {profiles.map((p) => p.displayName || p.handle).join(', ')}
-              </div>
-            </div>
-          )}
+          {sortedPairs.map((o, i) => (
+            <CollapsiblePair
+              key={o.id}
+              overlap={o}
+              defaultOpen={i === 0}
+              onDrillDown={handleDrillDown}
+            />
+          ))}
         </div>
       )}
 

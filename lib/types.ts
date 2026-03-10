@@ -52,8 +52,17 @@ export interface PairwiseOverlap {
 }
 
 export interface ThreeWayOverlap {
+  /** Raw overlap counts */
   follower: number;
   engagement: number;
+  /** Jaccard index (0–100) for the three-way intersection */
+  followerJaccard: number;
+  engagementJaccard: number;
+  /** The (up to 3) profiles included in this N-way overlap */
+  profiles: BskyProfile[];
+  /** Per-profile share: what % of each profile's audience is in the N-way overlap */
+  followerPcts: number[];
+  engagementPcts: number[];
 }
 
 export interface CollaborationData {

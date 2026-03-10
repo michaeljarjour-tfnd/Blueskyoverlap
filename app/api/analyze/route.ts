@@ -288,16 +288,51 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // ── 4. Three-way overlap ──────────────────────────────────────────────
+        // ── 4. Three-way overlap (first 3 profiles; cap at 3 for hero display) ──
+        // Always computed when 3+ accounts are requested. The hero section shows
+        // the N-way overlap for up to 3 accounts; pairs go in the collapsible section.
         let threeWayOverlap = null;
-        if (profiles.length === 3) {
-          const folThree = [...followerSets[0]].filter(
-            (x) => followerSets[1].has(x) && followerSets[2].has(x)
-          );
-          const engThree = [...engagementSets[0]].filter(
-            (x) => engagementSets[1].has(x) && engagementSets[2].has(x)
-          );
-          threeWayOverlap = { follower: folThree.length, engagement: engThree.length };
+        if (profiles.length >= 3) {
+          const fs0 = followerSets[0], fs1 = followerSets[1], fs2 = followerSets[2];
+          const es0 = engagementSets[0], es1 = engagementSets[1], es2 = engagementSets[2];
+
+          const folThreeArr = [...fs0].filter((x) => fs1.has(x) && fs2.has(x));
+          const folThreeCount = folThreeArr.length;
+          const folUnionSize = new Set([...fs0, ...fs1, ...fs2]).size;
+          const followerJaccard = folUnionSize > 0 ? (folThreeCount / folUnionSize) * 100 : 0;
+
+          const engThreeArr = [...es0].filter((x) => es1.has(x) && es2.has(x));
+          const engThreeCount = engThreeArr.length;
+          const engUnionSize = new Set([...es0, ...es1, ...es2]).size;
+          const engagementJaccard = engUnionSize > 0 ? (engThreeCount / engUnionSize) * 100 : 0;
+
+          // DID samples for three-way drill-down modal
+          overlapDetailStore['three-way'] = {
+            followerDids: folThreeArr.slice(0, MAX_OVERLAP_SAMPLE),
+            engagementDids: engThreeArr.slice(0, MAX_OVERLAP_SAMPLE),
+          };
+
+          // Per-profile share: what % of each profile's audience is in the 3-way overlap
+          const followerPcts = [
+            fs0.size > 0 ? (folThreeCount / fs0.size) * 100 : 0,
+            fs1.size > 0 ? (folThreeCount / fs1.size) * 100 : 0,
+            fs2.size > 0 ? (folThreeCount / fs2.size) * 100 : 0,
+          ];
+          const engagementPcts = [
+            es0.size > 0 ? (engThreeCount / es0.size) * 100 : 0,
+            es1.size > 0 ? (engThreeCount / es1.size) * 100 : 0,
+            es2.size > 0 ? (engThreeCount / es2.size) * 100 : 0,
+          ];
+
+          threeWayOverlap = {
+            follower: folThreeCount,
+            engagement: engThreeCount,
+            followerJaccard,
+            engagementJaccard,
+            profiles: [profiles[0], profiles[1], profiles[2]],
+            followerPcts,
+            engagementPcts,
+          };
         }
 
         // ── 5. Collaboration values ───────────────────────────────────────────

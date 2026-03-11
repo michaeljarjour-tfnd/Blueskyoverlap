@@ -1,0 +1,18 @@
+[
+  {
+    "name": "Adam Cole",
+    "did": "did:plc:xdho5iuct6fexr2kb5o5tcuk",
+    "handle": "adamcolekelly.bsky.social",
+    "displayName": "Adam Cole-Kelly",
+    "description": "",
+    "followersCount": 0,
+    "topics": [
+      "Explanatory"
+    ],
+    "geography": "National - US",
+    "outlet": "Howtown",
+    "matchConfidence": 35,
+    "verified": false,
+    "source": "name-search"
+  }
+]

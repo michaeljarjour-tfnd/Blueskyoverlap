@@ -168,3 +168,13 @@ export interface OverlapDetail {
   account1: BskyProfile;
   account2: BskyProfile;
 }
+
+// ── Saved reports ──────────────────────────────────────────────────────────────
+
+/** Stored in Redis for shareable report links. Omits overlapDetails (DID samples)
+ *  to keep stored size small (~15-30 KB vs ~300 KB with samples). */
+export interface SavedReport {
+  reportId: string;
+  createdAt: string; // ISO 8601
+  result: Omit<AnalysisResult, 'overlapDetails'>;
+}

@@ -557,7 +557,7 @@ export default function Home() {
 
       {/* Results */}
       {phase === 'results' && result && (
-        <ResultsSection result={result} />
+        <ResultsSection result={result} mode="live" />
       )}
 
       <Footer />

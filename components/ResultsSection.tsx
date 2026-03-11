@@ -7,6 +7,8 @@ import OverlapDetailModal from './OverlapDetailModal';
 
 interface Props {
   result: AnalysisResult;
+  /** 'live' = analysis just ran (show share button), 'saved' = viewing a saved report */
+  mode?: 'live' | 'saved';
 }
 
 // ── Overlap badge ──────────────────────────────────────────────────────────────
@@ -617,9 +619,83 @@ function ThreeWayOverlapCards({
   );
 }
 
+// ── Share button ───────────────────────────────────────────────────────────────
+
+function ShareButton({ result }: { result: AnalysisResult }) {
+  const [state, setState] = useState<'idle' | 'saving' | 'copied' | 'error'>('idle');
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+
+  const handleShare = async () => {
+    if (state === 'saving') return;
+
+    // If we already have a URL, just copy it again
+    if (shareUrl) {
+      await navigator.clipboard.writeText(shareUrl);
+      setState('copied');
+      setTimeout(() => setState('idle'), 2000);
+      return;
+    }
+
+    setState('saving');
+    try {
+      const res = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(result),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to save report');
+      }
+
+      const { url } = (await res.json()) as { id: string; url: string };
+      setShareUrl(url);
+      await navigator.clipboard.writeText(url);
+      setState('copied');
+      setTimeout(() => setState('idle'), 2000);
+    } catch {
+      setState('error');
+      setTimeout(() => setState('idle'), 3000);
+    }
+  };
+
+  const label =
+    state === 'saving' ? 'Saving...' :
+    state === 'copied' ? 'Link copied!' :
+    state === 'error' ? 'Failed — try again' :
+    shareUrl ? 'Copy link' : 'Share report';
+
+  return (
+    <button
+      onClick={handleShare}
+      disabled={state === 'saving'}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '7px 14px',
+        border: '1px solid var(--color-border)',
+        borderRadius: 5,
+        background: state === 'copied' ? '#e8f5e9' : '#fff',
+        color: state === 'copied' ? '#2e7d32' : state === 'error' ? '#c62828' : 'var(--color-navy)',
+        fontSize: 13,
+        fontWeight: 500,
+        cursor: state === 'saving' ? 'wait' : 'pointer',
+        transition: 'background 0.15s, color 0.15s',
+        fontFamily: 'var(--font-sans)',
+      }}
+    >
+      <span style={{ fontSize: 14 }}>
+        {state === 'copied' ? '✓' : state === 'error' ? '✕' : '↗'}
+      </span>
+      {label}
+    </button>
+  );
+}
+
 // ── Main results section ───────────────────────────────────────────────────────
 
-export default function ResultsSection({ result }: Props) {
+export default function ResultsSection({ result, mode = 'live' }: Props) {
   const { profiles, pairwiseOverlaps, threeWayOverlap, overlapDetails } = result;
 
   const [modalState, setModalState] = useState<{
@@ -682,6 +758,13 @@ export default function ResultsSection({ result }: Props) {
 
       {/* ── Insights ────────────────────────────────────────────────────────── */}
       <InsightsPanel overlaps={pairwiseOverlaps} />
+
+      {/* ── Share button ──────────────────────────────────────────────────── */}
+      {mode === 'live' && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
+          <ShareButton result={result} />
+        </div>
+      )}
 
       {/* ── Creator cards ─────────────────────────────────────────────────── */}
       <div>

@@ -118,6 +118,7 @@ function OverlapCard({
   sharedPcts,
   uniquePcts,
   onDrillDown,
+  isEstimated,
 }: {
   type: 'followers' | 'engagement';
   sharedCount: number;
@@ -126,10 +127,12 @@ function OverlapCard({
   sharedPcts: number[];
   uniquePcts: number[];
   onDrillDown: () => void;
+  isEstimated?: boolean;
 }) {
   const interp = getInterpretation(jaccard);
-  const sectionLabel = type === 'followers' ? 'Follower Overlap' : 'Engagement Overlap';
-  const sharedLabel = type === 'followers' ? 'shared followers' : 'shared engagers';
+  const isEstimatedFollowers = type === 'followers' && isEstimated;
+  const sectionLabel = isEstimatedFollowers ? 'Minimum Follower Overlap' : (type === 'followers' ? 'Follower Overlap' : 'Engagement Overlap');
+  const sharedLabel = isEstimatedFollowers ? 'min. shared followers (est.)' : (type === 'followers' ? 'shared followers' : 'shared engagers');
 
   return (
     <div
@@ -256,6 +259,7 @@ function PairOverlapCards({
           overlap.followers2 > 0 ? (overlap.uniqueFollowers2 / overlap.followers2) * 100 : 0,
         ]}
         onDrillDown={() => onDrillDown(overlap.id, 'followers')}
+        isEstimated={overlap.isEstimated}
       />
       <OverlapCard
         type="engagement"
@@ -357,54 +361,114 @@ function CollapsiblePair({
 function generateInsights(overlaps: PairwiseOverlap[]): string[] {
   const insights: string[] = [];
 
+  // ── Identify unique creator roles across all pairs ──
+  // Collect stats to assign each creator a distinctive strength
+  const creatorStats = new Map<string, {
+    name: string;
+    followers: number;
+    engagementRate: number;
+    uniqueReach: number;
+  }>();
+
+  for (const o of overlaps) {
+    for (const [acct, followers, engaged, unique] of [
+      [o.account1, o.followers1, o.engaged1, o.uniqueFollowers1] as const,
+      [o.account2, o.followers2, o.engaged2, o.uniqueFollowers2] as const,
+    ]) {
+      const name = acct.displayName || acct.handle;
+      const existing = creatorStats.get(acct.did);
+      const engRate = followers > 0 ? (engaged / followers) * 100 : 0;
+      if (!existing || followers > existing.followers) {
+        creatorStats.set(acct.did, { name, followers, engagementRate: engRate, uniqueReach: unique });
+      }
+    }
+  }
+
+  // Assign roles based on standout strengths
+  const creators = Array.from(creatorStats.values());
+  if (creators.length >= 2) {
+    const byFollowers = [...creators].sort((a, b) => b.followers - a.followers);
+    const byEngagement = [...creators].sort((a, b) => b.engagementRate - a.engagementRate);
+    const byUnique = [...creators].sort((a, b) => b.uniqueReach - a.uniqueReach);
+
+    const roleLines: string[] = [];
+    const assigned = new Set<string>();
+
+    // Biggest audience
+    if (!assigned.has(byFollowers[0].name)) {
+      roleLines.push(`${byFollowers[0].name} brings the largest reach — their audience is the foundation any collaboration builds on.`);
+      assigned.add(byFollowers[0].name);
+    }
+    // Highest engagement rate
+    if (!assigned.has(byEngagement[0].name)) {
+      roleLines.push(`${byEngagement[0].name} has the strongest engagement — their audience doesn't just follow, they show up and interact.`);
+      assigned.add(byEngagement[0].name);
+    }
+    // Most unique followers
+    if (!assigned.has(byUnique[0].name)) {
+      roleLines.push(`${byUnique[0].name} opens doors to the most untapped audience — followers the others can't reach on their own.`);
+      assigned.add(byUnique[0].name);
+    }
+    // Anyone left gets a role too
+    for (const c of creators) {
+      if (!assigned.has(c.name)) {
+        roleLines.push(`${c.name} adds depth and diversity to the mix — a voice that rounds out the group.`);
+        assigned.add(c.name);
+      }
+    }
+
+    if (roleLines.length > 0) {
+      insights.push(roleLines.join(' '));
+    }
+  }
+
   for (const o of overlaps) {
     const a1 = o.account1.displayName || o.account1.handle;
     const a2 = o.account2.displayName || o.account2.handle;
     const fj = o.followerJaccard;
     const ej = o.engagementJaccard;
 
-    // ── Strategic partnership framing based on overlap level ──
-    // Each tier teaches a different lesson about how partnerships create value.
+    // ── Partnership potential based on overlap level ──
     if (fj > 40) {
       insights.push(
-        `${a1} and ${a2} are speaking to essentially the same crowd. Partnerships between highly overlapping audiences work best for credibility — a joint endorsement carries extra weight because both voices are already trusted. The growth play here is depth, not breadth.`
+        `${a1} and ${a2} are practically family — their audiences already trust both names. A collab here is less about discovery and more about doubling down: joint endorsements, shared projects, and going deeper together. The crowd is already cheering for both of you.`
       );
     } else if (fj > 20) {
       insights.push(
-        `${a1} and ${a2} have strong audience crossover — their followers already know both names. This is the sweet spot for collaborative content: the shared audience acts as a built-in distribution engine, amplifying anything they do together to both sides.`
+        `${a1} and ${a2} have a great thing going — strong crossover means your shared fans will amplify anything you create together. That built-in audience is your launchpad. Plus, there's still plenty of fresh audience on each side to grow into.`
       );
     } else if (fj > 10) {
       insights.push(
-        `${a1} and ${a2} share enough audience to have natural credibility together, but most of their followers only know one of them. This is the ideal profile for a growth partnership — the shared slice provides social proof, while the unique audiences provide new reach.`
+        `This is a really exciting match. ${a1} and ${a2} overlap just enough to have natural credibility together, but most of each other's audience is brand new territory. The shared followers give you social proof, the unique ones give you growth. Best of both worlds.`
       );
     } else if (fj > 3) {
       insights.push(
-        `${a1} and ${a2} have largely separate audiences with a thin bridge between them. The small overlap means a few early adopters already follow both — they can become the seed audience that cross-pollinates a partnership to both sides.`
+        `${a1} and ${a2} are mostly reaching different people — and that's actually a great thing for growth. The small bridge of shared followers can spark the connection, while the vast unique audiences on both sides mean real discovery potential.`
       );
     } else {
       insights.push(
-        `${a1} and ${a2} reach almost entirely different people. When audiences don't overlap, a partnership is a pure discovery play — every new follower gained is truly net-new. The risk is lower relevance, so content alignment matters more here than anywhere else.`
+        `${a1} and ${a2} have almost zero audience overlap — every follower one introduces to the other is genuinely new. This is a bold discovery play. If the content fits, the growth ceiling here is huge.`
       );
     }
 
-    // ── Engagement vs follower divergence — teaches about content affinity ──
+    // ── Engagement vs follower divergence ──
     if (ej > fj + 8 && ej > 5) {
       insights.push(
-        `The engagement overlap between ${a1} and ${a2} runs higher than the follower overlap. This is a strong signal — it means their active, engaged audiences share taste even when the broader follower bases don't fully overlap. Partnerships that tap into engaged audiences tend to convert better than ones that just reach passive followers.`
+        `Here's something exciting: the engagement overlap between ${a1} and ${a2} is even higher than the follower overlap. That means people who actively engage with both creators share real taste and interest — a collab here is likely to land well with the audiences that matter most.`
       );
     } else if (fj > ej + 10 && fj > 10) {
       insights.push(
-        `${a1} and ${a2} share a notable number of followers, but their engagement audiences are more distinct. Shared followers aren't always shared attention — these audiences follow both but actively engage with different content styles. A partnership works best when each creator leads with their own voice rather than blending into one.`
+        `Interesting dynamic: ${a1} and ${a2} share plenty of followers, but their engaged audiences are more distinct. These followers appreciate both creators but in different ways. The sweet spot is letting each person lead with their own style — the audience will love the contrast.`
       );
     }
 
-    // ── Asymmetric reach — teaches about leverage and mutual value ──
+    // ── Asymmetric reach ──
     const pctDiff = Math.abs(o.followerOverlapPct1 - o.followerOverlapPct2);
     if (pctDiff > 15 && fj > 2) {
       const bigger = o.followerOverlapPct1 < o.followerOverlapPct2 ? a1 : a2;
       const smaller = o.followerOverlapPct1 < o.followerOverlapPct2 ? a2 : a1;
       insights.push(
-        `There's a size asymmetry here: ${bigger} brings a much larger unique audience to the table. For ${smaller}, the growth upside is significant. For ${bigger}, the value is different — partnering with a more focused creator often brings higher engagement quality and niche credibility. The best asymmetric partnerships recognize that both sides bring something the other can't buy.`
+        `${bigger} brings a bigger stage, and ${smaller} brings a focused, engaged community. That's not a mismatch — it's a recipe. ${smaller} gets meaningful exposure, and ${bigger} gets the credibility boost that comes from partnering with someone whose audience truly trusts them.`
       );
     }
   }

@@ -43,7 +43,7 @@ export interface PairwiseOverlap {
   uniqueEngaged1: number;
   uniqueEngaged2: number;
   isEstimated?: boolean;
-  estimationMethod?: 'minhash' | 'exact';
+  estimationMethod?: 'blend' | 'exact';
   // Legacy aliases (engagement fields) — kept for UI compat
   overlap: number;
   overlapPct1: number;

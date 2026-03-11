@@ -1,10 +1,8 @@
 import { NextRequest } from 'next/server';
 import { getProfile, extractHandle } from '@/lib/bsky/api';
-import { getOrFetchFollowers, getOrFetchEngagement, getOrFetchMinHash } from '@/lib/redis/followers';
-import type { MinHashResult } from '@/lib/redis/followers';
+import { getOrFetchFollowers, getOrFetchEngagement } from '@/lib/redis/followers';
 import { getRedis } from '@/lib/redis/client';
 import { calculateCollaborationValue } from '@/lib/analysis/collaboration';
-import { MinHashSignature, projectOverlap } from '@/lib/analysis/minhash';
 import type {
   AnalyzeRequest,
   BskyProfile,
@@ -143,20 +141,13 @@ export async function POST(req: NextRequest) {
         }
         sendProgress(15);
 
-        const useMinHash = speedTier === 'quick' || speedTier === 'balanced';
-
         // Process accounts sequentially to avoid hammering the Bluesky API.
         // Within each account, followers + engagement still run in parallel
         // (the global concurrency limiter in api.ts caps at 5 in-flight requests).
 
         const perAccountPct = 70 / profiles.length; // spread 15%–85% across accounts
 
-        // MinHash path: signatures instead of full sets
-        const minhashResults: MinHashResult[] = [];
-        // Exact path: full sets
         const followerSets: Set<string>[] = [];
-
-        // Engagement is always exact (small sets)
         const engagementSets: Set<string>[] = [];
         const engagementStats: EngagementStats[] = [];
 
@@ -169,71 +160,36 @@ export async function POST(req: NextRequest) {
           const profile = profiles[idx];
           const basePct = 15 + Math.floor(idx * perAccountPct);
 
-          if (useMinHash) {
-            // MinHash path — stream followers through signature
-            const [mhResult, engagementResult] = await Promise.all([
-              getOrFetchMinHash(
+          const [followerResult, engagementResult] = await Promise.all([
+            getOrFetchFollowers(
+              profile.did,
+              speedTier,
+              (fetched, max) => {
+                followerProgress[profile.did] = { fetched, max };
+                sendProgress(basePct);
+              },
+              abortController.signal
+            ),
+            withTimeout(
+              getOrFetchEngagement(
                 profile.did,
                 speedTier,
-                (fetched, max) => {
-                  followerProgress[profile.did] = { fetched, max };
+                maxPosts,
+                (analyzed, total) => {
+                  postProgress[profile.did] = { analyzed, total };
                   sendProgress(basePct);
                 },
                 abortController.signal
               ),
-              withTimeout(
-                getOrFetchEngagement(
-                  profile.did,
-                  speedTier,
-                  maxPosts,
-                  (analyzed, total) => {
-                    postProgress[profile.did] = { analyzed, total };
-                    sendProgress(basePct);
-                  },
-                  abortController.signal
-                ),
-                35_000,
-                EMPTY_ENGAGEMENT
-              ),
-            ]);
+              35_000,
+              EMPTY_ENGAGEMENT
+            ),
+          ]);
 
-            minhashResults.push(mhResult);
-            engagementSets.push(engagementResult.set);
-            engagementStats.push(engagementResult.stats);
-            cacheStatus[profile.did] = mhResult.fromCache ? 'hit' : 'miss';
-          } else {
-            // Exact path — full follower sets (Complete tier uses chunked fetch, not this)
-            const [followerResult, engagementResult] = await Promise.all([
-              getOrFetchFollowers(
-                profile.did,
-                speedTier,
-                (fetched, max) => {
-                  followerProgress[profile.did] = { fetched, max };
-                  sendProgress(basePct);
-                },
-                abortController.signal
-              ),
-              withTimeout(
-                getOrFetchEngagement(
-                  profile.did,
-                  speedTier,
-                  maxPosts,
-                  (analyzed, total) => {
-                    postProgress[profile.did] = { analyzed, total };
-                    sendProgress(basePct);
-                  },
-                  abortController.signal
-                ),
-                35_000,
-                EMPTY_ENGAGEMENT
-              ),
-            ]);
-
-            followerSets.push(followerResult.set);
-            engagementSets.push(engagementResult.set);
-            engagementStats.push(engagementResult.stats);
-            cacheStatus[profile.did] = followerResult.fromCache ? 'hit' : 'miss';
-          }
+          followerSets.push(followerResult.set);
+          engagementSets.push(engagementResult.set);
+          engagementStats.push(engagementResult.stats);
+          cacheStatus[profile.did] = followerResult.fromCache ? 'hit' : 'miss';
 
           // Mark this account complete at 100%
           const curFolMax = followerProgress[profile.did]?.max ?? 1;
@@ -250,38 +206,17 @@ export async function POST(req: NextRequest) {
 
         for (let i = 0; i < profiles.length; i++) {
           for (let j = i + 1; j < profiles.length; j++) {
-            // ── Follower overlap ──
-            let followerOverlap: number;
-            let followers1: number;
-            let followers2: number;
-            let followerJaccard: number;
-            let isEstimated = false;
-
-            if (useMinHash) {
-              // MinHash: estimate Jaccard, project overlap using real follower counts
-              const sigA = MinHashSignature.fromArray(minhashResults[i].signature);
-              const sigB = MinHashSignature.fromArray(minhashResults[j].signature);
-              const jaccardRaw = sigA.jaccard(sigB); // 0–1
-
-              // Use real follower counts from profile API
-              followers1 = profiles[i].followersCount ?? minhashResults[i].count;
-              followers2 = profiles[j].followersCount ?? minhashResults[j].count;
-              followerOverlap = projectOverlap(jaccardRaw, followers1, followers2);
-              followerJaccard = jaccardRaw * 100; // convert to 0–100
-              isEstimated = true;
-            } else {
-              // Exact: set intersection
-              const folOverlapSet = new Set(
-                [...followerSets[i]].filter((x) => followerSets[j].has(x))
-              );
-              const folUnion = new Set([...followerSets[i], ...followerSets[j]]);
-              followers1 = followerSets[i].size;
-              followers2 = followerSets[j].size;
-              followerOverlap = folOverlapSet.size;
-              followerJaccard = folUnion.size > 0
-                ? (folOverlapSet.size / folUnion.size) * 100
-                : 0;
-            }
+            // ── Follower overlap (exact on sample) ──
+            const folOverlapSet = new Set(
+              [...followerSets[i]].filter((x) => followerSets[j].has(x))
+            );
+            const folUnion = new Set([...followerSets[i], ...followerSets[j]]);
+            const sampleFollowers1 = followerSets[i].size;
+            const sampleFollowers2 = followerSets[j].size;
+            const sampleOverlap = folOverlapSet.size;
+            const sampleJaccard = folUnion.size > 0
+              ? (folOverlapSet.size / folUnion.size) * 100
+              : 0;
 
             // ── Engagement overlap (always exact) ──
             const engOverlapSet = new Set(
@@ -292,16 +227,48 @@ export async function POST(req: NextRequest) {
               ? (engOverlapSet.size / engUnion.size) * 100
               : 0;
 
-            // Follower DID samples — only available for exact path
-            const followerSample: string[] = [];
-            if (!useMinHash) {
-              const folOverlapSet = new Set(
-                [...followerSets[i]].filter((x) => followerSets[j].has(x))
+            // ── Blend for low-coverage samples (minimum overlap estimate) ──
+            const realFollowers1 = profiles[i].followersCount ?? sampleFollowers1;
+            const realFollowers2 = profiles[j].followersCount ?? sampleFollowers2;
+            const coverageA = sampleFollowers1 / Math.max(realFollowers1, 1);
+            const coverageB = sampleFollowers2 / Math.max(realFollowers2, 1);
+            const coverage = (coverageA + coverageB) / 2;
+
+            let followerOverlap: number;
+            let followers1: number;
+            let followers2: number;
+            let followerJaccard: number;
+            let isEstimated = false;
+
+            if (coverage < 0.9) {
+              // Coverage-weighted blend of sample Jaccard + engagement Jaccard.
+              // Engagement Jaccard is systematically lower than follower Jaccard
+              // (lurkers inflate follower overlap), so the blend underestimates —
+              // making it a reliable minimum / lower bound.
+              const sJ = sampleJaccard / 100;
+              const eJ = engagementJaccard / 100;
+              const blendedJ = coverage * sJ + (1 - coverage) * eJ;
+
+              followers1 = realFollowers1;
+              followers2 = realFollowers2;
+              followerOverlap = Math.round(
+                blendedJ * (followers1 + followers2) / (1 + blendedJ)
               );
-              for (const did of folOverlapSet) {
-                followerSample.push(did);
-                if (followerSample.length >= MAX_OVERLAP_SAMPLE) break;
-              }
+              followerJaccard = blendedJ * 100;
+              isEstimated = true;
+            } else {
+              // High coverage — sample ≈ full set, use exact intersection
+              followers1 = sampleFollowers1;
+              followers2 = sampleFollowers2;
+              followerOverlap = sampleOverlap;
+              followerJaccard = sampleJaccard;
+            }
+
+            // Follower DID samples
+            const followerSample: string[] = [];
+            for (const did of folOverlapSet) {
+              followerSample.push(did);
+              if (followerSample.length >= MAX_OVERLAP_SAMPLE) break;
             }
             const engagementSample: string[] = [];
             for (const did of engOverlapSet) {
@@ -345,7 +312,7 @@ export async function POST(req: NextRequest) {
               uniqueEngaged1: engagementSets[i].size - engOverlapSet.size,
               uniqueEngaged2: engagementSets[j].size - engOverlapSet.size,
               isEstimated,
-              estimationMethod: isEstimated ? 'minhash' : 'exact',
+              estimationMethod: isEstimated ? 'blend' : 'exact',
               // Legacy aliases
               overlap: engOverlapSet.size,
               overlapPct1:
@@ -366,81 +333,62 @@ export async function POST(req: NextRequest) {
         // ── 4. Three-way overlap (first 3 profiles; cap at 3 for hero display) ──
         let threeWayOverlap = null;
         if (profiles.length >= 3) {
-          if (useMinHash) {
-            // MinHash three-way: estimate from pairwise Jaccards
-            // For three-way, we can't directly compute from MinHash signatures,
-            // so we use the minimum pairwise Jaccard as a conservative estimate.
-            const sig0 = MinHashSignature.fromArray(minhashResults[0].signature);
-            const sig1 = MinHashSignature.fromArray(minhashResults[1].signature);
-            const sig2 = MinHashSignature.fromArray(minhashResults[2].signature);
-
-            const j01 = sig0.jaccard(sig1);
-            const j02 = sig0.jaccard(sig2);
-            const j12 = sig1.jaccard(sig2);
-            // Conservative: three-way Jaccard <= min of pairwise Jaccards
-            const threeWayJaccard = Math.min(j01, j02, j12);
-
-            const f0 = profiles[0].followersCount ?? minhashResults[0].count;
-            const f1 = profiles[1].followersCount ?? minhashResults[1].count;
-            const f2 = profiles[2].followersCount ?? minhashResults[2].count;
-            const totalFollowers = f0 + f1 + f2;
-            // Rough projection: threeWayOverlap ≈ threeWayJaccard * totalFollowers / (1 + 2*threeWayJaccard)
-            const folThreeCount = threeWayJaccard > 0
-              ? Math.round(threeWayJaccard * totalFollowers / (1 + 2 * threeWayJaccard))
-              : 0;
-
-            // Engagement three-way is exact
-            const es0 = engagementSets[0], es1 = engagementSets[1], es2 = engagementSets[2];
-            const engThreeArr = [...es0].filter((x) => es1.has(x) && es2.has(x));
-
-            overlapDetailStore['three-way'] = {
-              followerDids: [], // No samples for MinHash
-              engagementDids: engThreeArr.slice(0, MAX_OVERLAP_SAMPLE),
-            };
-
-            const engUnionSize = new Set([...es0, ...es1, ...es2]).size;
-
-            threeWayOverlap = {
-              follower: folThreeCount,
-              engagement: engThreeArr.length,
-              followerJaccard: threeWayJaccard * 100,
-              engagementJaccard: engUnionSize > 0 ? (engThreeArr.length / engUnionSize) * 100 : 0,
-              profiles: [profiles[0], profiles[1], profiles[2]],
-              followerPcts: [
-                f0 > 0 ? (folThreeCount / f0) * 100 : 0,
-                f1 > 0 ? (folThreeCount / f1) * 100 : 0,
-                f2 > 0 ? (folThreeCount / f2) * 100 : 0,
-              ],
-              engagementPcts: [
-                es0.size > 0 ? (engThreeArr.length / es0.size) * 100 : 0,
-                es1.size > 0 ? (engThreeArr.length / es1.size) * 100 : 0,
-                es2.size > 0 ? (engThreeArr.length / es2.size) * 100 : 0,
-              ],
-            };
-          } else {
             const fs0 = followerSets[0], fs1 = followerSets[1], fs2 = followerSets[2];
             const es0 = engagementSets[0], es1 = engagementSets[1], es2 = engagementSets[2];
 
+            // Sample three-way intersections
             const folThreeArr = [...fs0].filter((x) => fs1.has(x) && fs2.has(x));
-            const folThreeCount = folThreeArr.length;
+            const sampleFolThreeCount = folThreeArr.length;
             const folUnionSize = new Set([...fs0, ...fs1, ...fs2]).size;
-            const followerJaccard = folUnionSize > 0 ? (folThreeCount / folUnionSize) * 100 : 0;
+            const sampleFolJaccard = folUnionSize > 0 ? (sampleFolThreeCount / folUnionSize) * 100 : 0;
 
             const engThreeArr = [...es0].filter((x) => es1.has(x) && es2.has(x));
             const engThreeCount = engThreeArr.length;
             const engUnionSize = new Set([...es0, ...es1, ...es2]).size;
-            const engagementJaccard = engUnionSize > 0 ? (engThreeCount / engUnionSize) * 100 : 0;
+            const engThreeJaccard = engUnionSize > 0 ? (engThreeCount / engUnionSize) * 100 : 0;
 
             overlapDetailStore['three-way'] = {
               followerDids: folThreeArr.slice(0, MAX_OVERLAP_SAMPLE),
               engagementDids: engThreeArr.slice(0, MAX_OVERLAP_SAMPLE),
             };
 
-            const followerPcts = [
-              fs0.size > 0 ? (folThreeCount / fs0.size) * 100 : 0,
-              fs1.size > 0 ? (folThreeCount / fs1.size) * 100 : 0,
-              fs2.size > 0 ? (folThreeCount / fs2.size) * 100 : 0,
-            ];
+            // Apply blend for low-coverage three-way
+            const realF0 = profiles[0].followersCount ?? fs0.size;
+            const realF1 = profiles[1].followersCount ?? fs1.size;
+            const realF2 = profiles[2].followersCount ?? fs2.size;
+            const cov0 = fs0.size / Math.max(realF0, 1);
+            const cov1 = fs1.size / Math.max(realF1, 1);
+            const cov2 = fs2.size / Math.max(realF2, 1);
+            const avgCoverage = (cov0 + cov1 + cov2) / 3;
+
+            let folThreeCount: number;
+            let followerJaccard3: number;
+            let followerPcts: number[];
+
+            if (avgCoverage < 0.9) {
+              const sJ = sampleFolJaccard / 100;
+              const eJ = engThreeJaccard / 100;
+              const blendedJ = avgCoverage * sJ + (1 - avgCoverage) * eJ;
+              const totalFollowers = realF0 + realF1 + realF2;
+              folThreeCount = blendedJ > 0
+                ? Math.round(blendedJ * totalFollowers / (1 + 2 * blendedJ))
+                : 0;
+              followerJaccard3 = blendedJ * 100;
+              followerPcts = [
+                realF0 > 0 ? (folThreeCount / realF0) * 100 : 0,
+                realF1 > 0 ? (folThreeCount / realF1) * 100 : 0,
+                realF2 > 0 ? (folThreeCount / realF2) * 100 : 0,
+              ];
+            } else {
+              folThreeCount = sampleFolThreeCount;
+              followerJaccard3 = sampleFolJaccard;
+              followerPcts = [
+                fs0.size > 0 ? (folThreeCount / fs0.size) * 100 : 0,
+                fs1.size > 0 ? (folThreeCount / fs1.size) * 100 : 0,
+                fs2.size > 0 ? (folThreeCount / fs2.size) * 100 : 0,
+              ];
+            }
+
             const engagementPcts = [
               es0.size > 0 ? (engThreeCount / es0.size) * 100 : 0,
               es1.size > 0 ? (engThreeCount / es1.size) * 100 : 0,
@@ -450,24 +398,22 @@ export async function POST(req: NextRequest) {
             threeWayOverlap = {
               follower: folThreeCount,
               engagement: engThreeCount,
-              followerJaccard,
-              engagementJaccard,
+              followerJaccard: followerJaccard3,
+              engagementJaccard: engThreeJaccard,
               profiles: [profiles[0], profiles[1], profiles[2]],
               followerPcts,
               engagementPcts,
             };
-          }
         }
 
         // ── 5. Collaboration values ───────────────────────────────────────────
         const collaborationValues = calculateCollaborationValue(
           profiles,
-          useMinHash ? null : engagementSets,
+          engagementSets,
           pairwiseOverlaps,
           true,
           engagementStats,
           intent,
-          useMinHash ? engagementSets.map((s) => s.size) : undefined
         );
 
         // ── 6. Send final result ──────────────────────────────────────────────

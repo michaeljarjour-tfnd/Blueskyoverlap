@@ -27,8 +27,10 @@ export interface ChunkedProgress {
   cursor?: string;
   fetched: number;
   total: number;
-  /** For engagement: JSON array of post URIs from the initial feed fetch */
-  feedUris?: string;
+  /** For engagement: post URIs from the initial feed fetch.
+   *  Stored as JSON string via hset, but Upstash may auto-deserialize
+   *  it back into an array, so consumers must handle both types. */
+  feedUris?: string | string[];
   /** For engagement: index of next post to process */
   postIndex?: number;
 }
@@ -60,13 +62,22 @@ export async function getProgress(
   try {
     const data = await redis.hgetall(progressKey(did, tier, dataType));
     if (!data || Object.keys(data).length === 0) return null;
+    const raw = data as Record<string, unknown>;
+    // feedUris may be a string (JSON) or already an array (Upstash auto-deserializes valid JSON)
+    const rawFeedUris = raw.feedUris;
+    let feedUris: string | string[] | undefined;
+    if (Array.isArray(rawFeedUris)) {
+      feedUris = rawFeedUris as string[];
+    } else if (typeof rawFeedUris === 'string' && rawFeedUris.length > 0) {
+      feedUris = rawFeedUris;
+    }
     return {
-      cursor: (data as Record<string, string>).cursor || undefined,
-      fetched: parseInt((data as Record<string, string>).fetched ?? '0', 10),
-      total: parseInt((data as Record<string, string>).total ?? '0', 10),
-      feedUris: (data as Record<string, string>).feedUris || undefined,
-      postIndex: (data as Record<string, string>).postIndex
-        ? parseInt((data as Record<string, string>).postIndex, 10)
+      cursor: (raw.cursor as string) || undefined,
+      fetched: parseInt(String(raw.fetched ?? '0'), 10),
+      total: parseInt(String(raw.total ?? '0'), 10),
+      feedUris,
+      postIndex: raw.postIndex != null
+        ? parseInt(String(raw.postIndex), 10)
         : undefined,
     };
   } catch {
@@ -90,7 +101,12 @@ export async function saveProgress(
       total: String(progress.total),
     };
     if (progress.cursor) fields.cursor = progress.cursor;
-    if (progress.feedUris) fields.feedUris = progress.feedUris;
+    // feedUris may be a string (JSON) or an array — always store as JSON string
+    if (progress.feedUris) {
+      fields.feedUris = typeof progress.feedUris === 'string'
+        ? progress.feedUris
+        : JSON.stringify(progress.feedUris);
+    }
     if (progress.postIndex !== undefined) fields.postIndex = String(progress.postIndex);
     await redis.hset(key, fields);
     await redis.expire(key, PARTIAL_TTL);

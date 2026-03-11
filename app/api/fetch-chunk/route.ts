@@ -133,8 +133,24 @@ async function fetchEngagementChunk(
   let postIndex: number;
 
   if (progress?.feedUris) {
-    // Resume from saved state
-    feedUris = JSON.parse(progress.feedUris);
+    // Resume from saved state.
+    // feedUris may be a string (JSON) or already an array (Upstash auto-deserializes).
+    if (Array.isArray(progress.feedUris)) {
+      feedUris = progress.feedUris;
+    } else {
+      try {
+        feedUris = JSON.parse(progress.feedUris);
+      } catch {
+        // Corrupted progress — clear and start fresh
+        await cleanupPartial(did, tier, 'engagement');
+        feedUris = await fetchAuthorFeedUris(did, maxPosts, undefined, deadline);
+        if (feedUris.length === 0) {
+          await addToPartialSet(did, tier, 'engagement', ['__empty__']);
+          await finalizeSet(did, tier, 'engagement');
+          return json({ status: 'complete', fetched: 0, total: 0 });
+        }
+      }
+    }
     postIndex = progress.postIndex ?? 0;
   } else {
     // First chunk — fetch the feed to get post URIs

@@ -304,7 +304,7 @@ export default function Home() {
 
         if (!resultReceived) {
           setErrorMsg(
-            'The analysis timed out before completing. Try Quick or Balanced mode for large accounts — or run it again, since cached follower data makes retries much faster.'
+            'The analysis timed out. Try Quick or Balanced mode for large accounts — or just run it again. It picks up where it left off, so retries are much faster.'
           );
           setPhase('error');
         }

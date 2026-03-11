@@ -9,9 +9,9 @@ interface Props {
 }
 
 const TIER_INFO: Record<SpeedTier, { label: string; desc: string; time: string; recommended?: boolean }> = {
-  quick:    { label: 'Quick',    desc: '2K followers + 50 posts · ±2% accuracy',  time: '~60s',   recommended: true },
-  balanced: { label: 'Balanced', desc: '5K followers + 100 posts · ±1% accuracy', time: '~2 min' },
-  complete: { label: 'Complete', desc: 'All followers + 200 posts · exact',        time: '5+ min' },
+  quick:    { label: 'Quick',    desc: 'Great for a fast snapshot',               time: '~60s',   recommended: true },
+  balanced: { label: 'Balanced', desc: 'More accurate, still fast',               time: '~2 min' },
+  complete: { label: 'Complete', desc: 'Exact results — best for deep dives',     time: '5+ min' },
 };
 
 const STORAGE_KEY = 'bsky-recent-handles';
@@ -345,7 +345,7 @@ export default function AnalysisForm({ onSubmit, loading }: Props) {
 
       {speedTier === 'complete' && (
         <div className="alert alert-info" style={{ marginTop: 8 }}>
-          Complete mode fetches all followers. For accounts with 50K+ followers this may exceed the 60-second serverless timeout.
+          Complete mode analyzes every follower. For very large accounts (50K+) this can take a while — if it times out, just run it again. It picks up where it left off.
         </div>
       )}
 

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getProfile, extractHandle } from '@/lib/bsky/api';
 import { getOrFetchFollowers, getOrFetchEngagement } from '@/lib/redis/followers';
+import { getRedis } from '@/lib/redis/client';
 import { calculateCollaborationValue } from '@/lib/analysis/collaboration';
 import type {
   AnalyzeRequest,
@@ -55,6 +56,11 @@ function encode(event: SseEvent): Uint8Array {
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as AnalyzeRequest;
   const { handles: rawHandles, speedTier = 'quick', intent = 'general' } = body;
+
+  // ── Prefetched mode: compute overlaps from already-cached Redis sets ────
+  if (body.prefetched && body.profiles && body.dids) {
+    return handlePrefetched(body.profiles, body.dids, speedTier, intent);
+  }
 
   const handles = rawHandles.map(extractHandle).filter(Boolean);
   if (handles.length < 2) {
@@ -392,4 +398,163 @@ export async function POST(req: NextRequest) {
       'X-Accel-Buffering': 'no',
     },
   });
+}
+
+// ── Prefetched compute-only mode ──────────────────────────────────────────────
+// All follower/engagement sets are already in Redis (cached by /api/fetch-chunk).
+// This function reads them and computes overlaps — no Bluesky API calls needed.
+
+async function handlePrefetched(
+  profiles: BskyProfile[],
+  dids: string[],
+  speedTier: SpeedTier,
+  intent: string
+): Promise<Response> {
+  const redis = getRedis();
+  if (!redis) {
+    return new Response(
+      JSON.stringify({ error: 'Redis is required for prefetched mode' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
+  try {
+    // Read all sets from Redis
+    const followerSets: Set<string>[] = [];
+    const engagementSets: Set<string>[] = [];
+    const engagementStats: EngagementStats[] = [];
+    const cacheStatus: Record<string, 'hit' | 'miss'> = {};
+
+    for (const did of dids) {
+      const folKey = `followers:${did}:${speedTier}`;
+      const engKey = `engagement:${did}:${speedTier}`;
+
+      const [folMembers, engMembers] = await Promise.all([
+        redis.smembers(folKey) as Promise<string[]>,
+        redis.smembers(engKey) as Promise<string[]>,
+      ]);
+
+      followerSets.push(new Set(folMembers ?? []));
+      engagementSets.push(new Set((engMembers ?? []).filter(d => d !== '__empty__')));
+      engagementStats.push({ totalLikes: 0, totalReposts: 0, postsAnalyzed: 0 });
+      cacheStatus[did] = 'hit';
+    }
+
+    // Compute pairwise overlaps (same logic as SSE path)
+    const overlapDetailStore: Record<string, { followerDids: string[]; engagementDids: string[] }> = {};
+    const pairwiseOverlaps: PairwiseOverlap[] = [];
+
+    for (let i = 0; i < profiles.length; i++) {
+      for (let j = i + 1; j < profiles.length; j++) {
+        const folOverlapSet = new Set([...followerSets[i]].filter((x) => followerSets[j].has(x)));
+        const folUnion = new Set([...followerSets[i], ...followerSets[j]]);
+        const followerJaccard = folUnion.size > 0 ? (folOverlapSet.size / folUnion.size) * 100 : 0;
+
+        const engOverlapSet = new Set([...engagementSets[i]].filter((x) => engagementSets[j].has(x)));
+        const engUnion = new Set([...engagementSets[i], ...engagementSets[j]]);
+        const engagementJaccard = engUnion.size > 0 ? (engOverlapSet.size / engUnion.size) * 100 : 0;
+
+        const followerSample: string[] = [];
+        for (const did of folOverlapSet) {
+          followerSample.push(did);
+          if (followerSample.length >= MAX_OVERLAP_SAMPLE) break;
+        }
+        const engagementSample: string[] = [];
+        for (const did of engOverlapSet) {
+          engagementSample.push(did);
+          if (engagementSample.length >= MAX_OVERLAP_SAMPLE) break;
+        }
+
+        const overlapId = `${profiles[i].did}-${profiles[j].did}`;
+        overlapDetailStore[overlapId] = { followerDids: followerSample, engagementDids: engagementSample };
+
+        pairwiseOverlaps.push({
+          id: overlapId,
+          account1: profiles[i],
+          account2: profiles[j],
+          followers1: followerSets[i].size,
+          followers2: followerSets[j].size,
+          followerOverlap: folOverlapSet.size,
+          followerOverlapPct1: followerSets[i].size > 0 ? (folOverlapSet.size / followerSets[i].size) * 100 : 0,
+          followerOverlapPct2: followerSets[j].size > 0 ? (folOverlapSet.size / followerSets[j].size) * 100 : 0,
+          followerJaccard,
+          uniqueFollowers1: followerSets[i].size - folOverlapSet.size,
+          uniqueFollowers2: followerSets[j].size - folOverlapSet.size,
+          engaged1: engagementSets[i].size,
+          engaged2: engagementSets[j].size,
+          engagementOverlap: engOverlapSet.size,
+          engagementOverlapPct1: engagementSets[i].size > 0 ? (engOverlapSet.size / engagementSets[i].size) * 100 : 0,
+          engagementOverlapPct2: engagementSets[j].size > 0 ? (engOverlapSet.size / engagementSets[j].size) * 100 : 0,
+          engagementJaccard,
+          uniqueEngaged1: engagementSets[i].size - engOverlapSet.size,
+          uniqueEngaged2: engagementSets[j].size - engOverlapSet.size,
+          overlap: engOverlapSet.size,
+          overlapPct1: engagementSets[i].size > 0 ? (engOverlapSet.size / engagementSets[i].size) * 100 : 0,
+          overlapPct2: engagementSets[j].size > 0 ? (engOverlapSet.size / engagementSets[j].size) * 100 : 0,
+          jaccard: engagementJaccard,
+          unique1: engagementSets[i].size - engOverlapSet.size,
+          unique2: engagementSets[j].size - engOverlapSet.size,
+        });
+      }
+    }
+
+    // Three-way overlap
+    let threeWayOverlap = null;
+    if (profiles.length >= 3) {
+      const fs0 = followerSets[0], fs1 = followerSets[1], fs2 = followerSets[2];
+      const es0 = engagementSets[0], es1 = engagementSets[1], es2 = engagementSets[2];
+
+      const folThreeArr = [...fs0].filter((x) => fs1.has(x) && fs2.has(x));
+      const engThreeArr = [...es0].filter((x) => es1.has(x) && es2.has(x));
+      const folUnionSize = new Set([...fs0, ...fs1, ...fs2]).size;
+      const engUnionSize = new Set([...es0, ...es1, ...es2]).size;
+
+      overlapDetailStore['three-way'] = {
+        followerDids: folThreeArr.slice(0, MAX_OVERLAP_SAMPLE),
+        engagementDids: engThreeArr.slice(0, MAX_OVERLAP_SAMPLE),
+      };
+
+      threeWayOverlap = {
+        follower: folThreeArr.length,
+        engagement: engThreeArr.length,
+        followerJaccard: folUnionSize > 0 ? (folThreeArr.length / folUnionSize) * 100 : 0,
+        engagementJaccard: engUnionSize > 0 ? (engThreeArr.length / engUnionSize) * 100 : 0,
+        profiles: [profiles[0], profiles[1], profiles[2]],
+        followerPcts: [
+          fs0.size > 0 ? (folThreeArr.length / fs0.size) * 100 : 0,
+          fs1.size > 0 ? (folThreeArr.length / fs1.size) * 100 : 0,
+          fs2.size > 0 ? (folThreeArr.length / fs2.size) * 100 : 0,
+        ],
+        engagementPcts: [
+          es0.size > 0 ? (engThreeArr.length / es0.size) * 100 : 0,
+          es1.size > 0 ? (engThreeArr.length / es1.size) * 100 : 0,
+          es2.size > 0 ? (engThreeArr.length / es2.size) * 100 : 0,
+        ],
+      };
+    }
+
+    const collaborationValues = calculateCollaborationValue(
+      profiles, engagementSets, pairwiseOverlaps, true, engagementStats, intent
+    );
+
+    const result: AnalysisResult = {
+      profiles,
+      pairwiseOverlaps,
+      threeWayOverlap,
+      collaborationValues,
+      cacheStatus,
+      speedTier,
+      intent: intent as AnalysisResult['intent'],
+      overlapDetails: overlapDetailStore,
+    };
+
+    return new Response(JSON.stringify(result), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return new Response(
+      JSON.stringify({ error: (err as Error).message ?? 'Compute failed' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
 }

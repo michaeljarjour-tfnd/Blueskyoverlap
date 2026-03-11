@@ -118,7 +118,34 @@ export interface AnalyzeRequest {
   handles: string[];
   speedTier: SpeedTier;
   intent: AnalysisIntent;
+  /** When true, skip fetching — read cached sets from Redis and compute only */
+  prefetched?: boolean;
+  /** Pre-resolved DIDs (required when prefetched is true) */
+  dids?: string[];
+  /** Pre-resolved profiles (required when prefetched is true) */
+  profiles?: BskyProfile[];
 }
+
+// ── Chunked fetch types ──────────────────────────────────────────────────────
+
+export type FetchDataType = 'followers' | 'engagement';
+
+export interface FetchChunkRequest {
+  did: string;
+  tier: SpeedTier;
+  dataType: FetchDataType;
+  maxPosts?: number;
+  /** Total follower count from profile (for progress display) */
+  totalFollowers?: number;
+}
+
+export interface FetchChunkResponse {
+  status: 'complete' | 'in_progress' | 'cached';
+  fetched: number;
+  total: number;
+}
+
+export type ChunkedFetchPhase = 'profiles' | 'followers' | 'engagement' | 'computing';
 
 export type SseEvent =
   | { type: 'progress'; message: string; pct: number; followerProgress?: Record<string, { fetched: number; max: number }>; postProgress?: Record<string, { analyzed: number; total: number }> }

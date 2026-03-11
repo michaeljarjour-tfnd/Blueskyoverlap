@@ -1,15 +1,20 @@
 import type { BskyProfile, EngagementStats } from '@/lib/types';
+import pLimit from 'p-limit';
 
 const BASE_URL = 'https://public.api.bsky.app/xrpc';
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 8;
 
-// ── Core fetch with 429/Retry-After handling (no artificial delays) ────────────
+// ── Concurrency limiter — max 5 in-flight Bluesky API requests ───────────────
+
+const apiLimit = pLimit(5);
+
+// ── Core fetch with 429/Retry-After handling ─────────────────────────────────
 
 async function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-export async function fetchWithRetry(url: string, signal?: AbortSignal): Promise<unknown> {
+async function fetchWithRetry(url: string, signal?: AbortSignal): Promise<unknown> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -20,10 +25,9 @@ export async function fetchWithRetry(url: string, signal?: AbortSignal): Promise
 
       if (res.status === 429) {
         const retryAfter = res.headers.get('Retry-After');
-        // Cap at 5 s — we can't afford a 30-60 s backoff inside a 60 s Vercel function
         const delay = retryAfter
-          ? Math.min(parseInt(retryAfter, 10) * 1000, 5_000)
-          : Math.min(1000 * 2 ** attempt, 5_000);
+          ? Math.min(parseInt(retryAfter, 10) * 1000, 30_000)
+          : Math.min(1000 * 2 ** attempt, 15_000);
         await sleep(delay);
         continue;
       }
@@ -37,7 +41,7 @@ export async function fetchWithRetry(url: string, signal?: AbortSignal): Promise
       if ((err as Error).name === 'AbortError') throw err;
       lastError = err as Error;
       if (attempt < MAX_RETRIES) {
-        await sleep(1500 * (attempt + 1));
+        await sleep(Math.min(1500 * (attempt + 1), 10_000));
       }
     }
   }
@@ -45,11 +49,16 @@ export async function fetchWithRetry(url: string, signal?: AbortSignal): Promise
   throw lastError ?? new Error('Max retries exceeded');
 }
 
+/** Throttled fetch — all Bluesky API calls go through the concurrency limiter */
+function throttledFetch(url: string, signal?: AbortSignal): Promise<unknown> {
+  return apiLimit(() => fetchWithRetry(url, signal));
+}
+
 // ── Profile ────────────────────────────────────────────────────────────────────
 
 export async function getProfile(actor: string, signal?: AbortSignal): Promise<BskyProfile> {
   const url = `${BASE_URL}/app.bsky.actor.getProfile?actor=${encodeURIComponent(actor)}`;
-  const data = await fetchWithRetry(url, signal) as BskyProfile;
+  const data = await throttledFetch(url, signal) as BskyProfile;
   return data;
 }
 
@@ -67,7 +76,7 @@ export async function fetchProfilesForDids(
     const batch = unique.slice(i, i + BATCH);
     const query = batch.map((d) => `actors=${encodeURIComponent(d)}`).join('&');
     try {
-      const data = (await fetchWithRetry(
+      const data = (await throttledFetch(
         `${BASE_URL}/app.bsky.actor.getProfiles?${query}`,
         signal
       )) as { profiles: BskyProfile[] };
@@ -100,7 +109,7 @@ export async function fetchFollowers(
     let url = `${BASE_URL}/app.bsky.graph.getFollowers?actor=${encodeURIComponent(actor)}&limit=100`;
     if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
 
-    const data = (await fetchWithRetry(url, signal)) as {
+    const data = (await throttledFetch(url, signal)) as {
       followers: Array<{ did: string }>;
       cursor?: string;
     };
@@ -114,7 +123,7 @@ export async function fetchFollowers(
 
     cursor = data.cursor;
     if (!cursor) break;
-    // No sleep — rate limits handled by fetchWithRetry's 429 logic
+    if (cursor) await sleep(100);
   }
 
   return followers;
@@ -127,7 +136,7 @@ async function getAuthorFeed(
   limit: number,
   signal?: AbortSignal
 ): Promise<Array<{ post: { uri: string } }>> {
-  const data = (await fetchWithRetry(
+  const data = (await throttledFetch(
     `${BASE_URL}/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(actor)}&limit=${Math.min(limit, 100)}`,
     signal
   )) as { feed: Array<{ post: { uri: string } }> };
@@ -136,7 +145,7 @@ async function getAuthorFeed(
 
 async function getPostLikes(postUri: string, signal?: AbortSignal): Promise<string[]> {
   try {
-    const data = (await fetchWithRetry(
+    const data = (await throttledFetch(
       `${BASE_URL}/app.bsky.feed.getLikes?uri=${encodeURIComponent(postUri)}&limit=100`,
       signal
     )) as { likes: Array<{ actor: { did: string } }> };
@@ -148,7 +157,7 @@ async function getPostLikes(postUri: string, signal?: AbortSignal): Promise<stri
 
 async function getPostReposts(postUri: string, signal?: AbortSignal): Promise<string[]> {
   try {
-    const data = (await fetchWithRetry(
+    const data = (await throttledFetch(
       `${BASE_URL}/app.bsky.feed.getRepostedBy?uri=${encodeURIComponent(postUri)}&limit=100`,
       signal
     )) as { repostedBy: Array<{ did: string }> };
@@ -189,7 +198,7 @@ export async function getEngagedUsers(
 
     // Report after fetch (accurate), then small delay to avoid 429 rate limits.
     onProgress?.(i + 1, feed.length);
-    if (i < feed.length - 1) await sleep(50);
+    if (i < feed.length - 1) await sleep(200);
   }
 
   return {

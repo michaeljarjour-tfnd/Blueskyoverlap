@@ -6,8 +6,11 @@ import ProgressPanel from '@/components/ProgressPanel';
 import ResultsSection from '@/components/ResultsSection';
 import type {
   AnalysisResult,
+  BskyProfile,
   SseEvent,
   SpeedTier,
+  ChunkedFetchPhase,
+  FetchChunkResponse,
 } from '@/lib/types';
 
 // ── State machine ──────────────────────────────────────────────────────────────
@@ -169,6 +172,12 @@ function Footer() {
   );
 }
 
+// ── Helper: sleep ─────────────────────────────────────────────────────────────
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -178,22 +187,15 @@ export default function Home() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [activeHandles, setActiveHandles] = useState<string[]>([]);
   const [activeSpeedTier, setActiveSpeedTier] = useState<SpeedTier>('quick');
+  const [fetchPhase, setFetchPhase] = useState<ChunkedFetchPhase | undefined>(undefined);
+  const [timeEstimate, setTimeEstimate] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const fetchStartRef = useRef(0);
 
-  const handleSubmit = useCallback(
-    async (handles: string[], speedTier: SpeedTier) => {
-      // Abort any in-flight request
-      abortRef.current?.abort();
-      setActiveHandles(handles);
-      setActiveSpeedTier(speedTier);
-      const ctrl = new AbortController();
-      abortRef.current = ctrl;
+  // ── SSE-based submit (Quick / Balanced) ──────────────────────────────────
 
-      setPhase('loading');
-      setProgress({ message: 'Starting…', pct: 0 });
-      setResult(null);
-      setErrorMsg(null);
-
+  const handleSseSubmit = useCallback(
+    async (handles: string[], speedTier: SpeedTier, ctrl: AbortController) => {
       try {
         const res = await fetch('/api/analyze', {
           method: 'POST',
@@ -211,8 +213,6 @@ export default function Home() {
         let buffer = '';
         let resultReceived = false;
 
-        // Client-side safety net: if the server never sends a result (timeout,
-        // crash, or network issue), cancel the stream and show an error.
         const readTimeout = setTimeout(() => {
           reader.cancel();
         }, 90_000);
@@ -241,7 +241,7 @@ export default function Home() {
                 resultReceived = true;
                 setResult(event.data);
                 setPhase('results');
-                reader.cancel(); // Don't wait for stream to naturally close
+                reader.cancel();
               } else if (event.type === 'error') {
                 resultReceived = true;
                 setErrorMsg(event.message);
@@ -256,7 +256,6 @@ export default function Home() {
 
         clearTimeout(readTimeout);
 
-        // Stream ended without a result — likely a server timeout
         if (!resultReceived) {
           setErrorMsg(
             'The analysis timed out before completing. Try Quick or Balanced mode for large accounts — or run it again, since cached follower data makes retries much faster.'
@@ -273,12 +272,216 @@ export default function Home() {
     []
   );
 
+  // ── Chunked submit (Complete) ────────────────────────────────────────────
+
+  const handleChunkedSubmit = useCallback(
+    async (handles: string[], ctrl: AbortController) => {
+      try {
+        // Phase 1: Resolve profiles
+        setFetchPhase('profiles');
+        setProgress({ message: 'Fetching profiles...', pct: 5 });
+
+        const profileResponses = await Promise.all(
+          handles.map((h) =>
+            fetch(`/api/profile?handle=${encodeURIComponent(h)}`, {
+              signal: ctrl.signal,
+            }).then((r) => r.json())
+          )
+        );
+
+        const profiles: BskyProfile[] = profileResponses.map((r) => r.profile ?? r);
+        const dids = profiles.map((p) => p.did);
+
+        if (profiles.some((p) => !p.did)) {
+          throw new Error('Failed to resolve one or more profiles');
+        }
+
+        // Initialize progress state
+        const folProgress: Record<string, { fetched: number; max: number }> = {};
+        const postProgress: Record<string, { analyzed: number; total: number }> = {};
+        for (const p of profiles) {
+          folProgress[p.did] = { fetched: 0, max: p.followersCount ?? 1 };
+          postProgress[p.did] = { analyzed: 0, total: 60 };
+        }
+        setProgress({ message: '', pct: 10, followerProgress: folProgress, postProgress });
+
+        fetchStartRef.current = Date.now();
+        let totalFetchedSoFar = 0;
+        const totalNeeded = profiles.reduce((s, p) => s + (p.followersCount ?? 0), 0);
+
+        // Phase 2: Fetch followers (chunked, sequential per account)
+        setFetchPhase('followers');
+
+        for (let i = 0; i < dids.length; i++) {
+          if (ctrl.signal.aborted) return;
+          const did = dids[i];
+          const totalFollowers = profiles[i].followersCount ?? 0;
+
+          while (true) {
+            if (ctrl.signal.aborted) return;
+
+            const res = await fetch('/api/fetch-chunk', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                did,
+                tier: 'complete',
+                dataType: 'followers',
+                totalFollowers,
+              }),
+              signal: ctrl.signal,
+            });
+
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error((err as { error?: string }).error ?? `Fetch chunk failed: ${res.statusText}`);
+            }
+
+            const chunk = (await res.json()) as FetchChunkResponse;
+
+            // Update progress
+            folProgress[did] = { fetched: chunk.fetched, max: chunk.total || totalFollowers };
+            totalFetchedSoFar = Object.values(folProgress).reduce((s, v) => s + v.fetched, 0);
+
+            // Time estimate
+            const elapsed = (Date.now() - fetchStartRef.current) / 1000;
+            if (totalFetchedSoFar > 0 && elapsed > 2) {
+              const rate = totalFetchedSoFar / elapsed;
+              const remaining = Math.max(0, totalNeeded - totalFetchedSoFar) / rate;
+              setTimeEstimate(remaining);
+            }
+
+            const overallPct = 10 + Math.floor((totalFetchedSoFar / Math.max(totalNeeded, 1)) * 60);
+            setProgress((prev) => ({
+              ...prev,
+              pct: Math.min(overallPct, 70),
+              followerProgress: { ...folProgress },
+            }));
+
+            if (chunk.status === 'complete' || chunk.status === 'cached') break;
+
+            // Poll delay
+            await sleep(300);
+          }
+        }
+
+        // Phase 3: Fetch engagement (chunked, sequential per account)
+        setFetchPhase('engagement');
+        setTimeEstimate(null);
+
+        for (let i = 0; i < dids.length; i++) {
+          if (ctrl.signal.aborted) return;
+          const did = dids[i];
+
+          while (true) {
+            if (ctrl.signal.aborted) return;
+
+            const res = await fetch('/api/fetch-chunk', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                did,
+                tier: 'complete',
+                dataType: 'engagement',
+                maxPosts: 60,
+              }),
+              signal: ctrl.signal,
+            });
+
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error((err as { error?: string }).error ?? `Engagement chunk failed: ${res.statusText}`);
+            }
+
+            const chunk = (await res.json()) as FetchChunkResponse;
+
+            postProgress[did] = { analyzed: chunk.fetched, total: chunk.total || 60 };
+            const postDone = Object.values(postProgress).reduce((s, v) => s + v.analyzed, 0);
+            const postTotal = Object.values(postProgress).reduce((s, v) => s + v.total, 0);
+            const engPct = postTotal > 0 ? 70 + Math.floor((postDone / postTotal) * 15) : 75;
+            setProgress((prev) => ({
+              ...prev,
+              pct: Math.min(engPct, 85),
+              postProgress: { ...postProgress },
+            }));
+
+            if (chunk.status === 'complete' || chunk.status === 'cached') break;
+
+            await sleep(300);
+          }
+        }
+
+        // Phase 4: Compute overlaps
+        setFetchPhase('computing');
+        setTimeEstimate(null);
+        setProgress((prev) => ({ ...prev, pct: 90 }));
+
+        const computeRes = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            handles,
+            speedTier: 'complete',
+            intent: 'general',
+            prefetched: true,
+            dids,
+            profiles,
+          }),
+          signal: ctrl.signal,
+        });
+
+        if (!computeRes.ok) {
+          const err = await computeRes.json().catch(() => ({}));
+          throw new Error((err as { error?: string }).error ?? 'Compute failed');
+        }
+
+        const analysisResult = (await computeRes.json()) as AnalysisResult;
+        setResult(analysisResult);
+        setPhase('results');
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setErrorMsg((err as Error).message ?? 'Something went wrong');
+          setPhase('error');
+        }
+      }
+    },
+    []
+  );
+
+  // ── Unified submit handler ───────────────────────────────────────────────
+
+  const handleSubmit = useCallback(
+    async (handles: string[], speedTier: SpeedTier) => {
+      abortRef.current?.abort();
+      setActiveHandles(handles);
+      setActiveSpeedTier(speedTier);
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+
+      setPhase('loading');
+      setProgress({ message: 'Starting…', pct: 0 });
+      setResult(null);
+      setErrorMsg(null);
+      setFetchPhase(undefined);
+      setTimeEstimate(null);
+
+      if (speedTier === 'complete') {
+        await handleChunkedSubmit(handles, ctrl);
+      } else {
+        await handleSseSubmit(handles, speedTier, ctrl);
+      }
+    },
+    [handleSseSubmit, handleChunkedSubmit]
+  );
+
   const handleReset = () => {
     abortRef.current?.abort();
     setPhase('idle');
     setResult(null);
     setErrorMsg(null);
     setProgress({ message: '', pct: 0 });
+    setFetchPhase(undefined);
+    setTimeEstimate(null);
   };
 
   return (
@@ -313,6 +516,9 @@ export default function Home() {
           message={progress.message}
           followerProgress={progress.followerProgress}
           postProgress={progress.postProgress}
+          speedTier={activeSpeedTier}
+          fetchPhase={fetchPhase}
+          timeEstimate={timeEstimate}
         />
       )}
 

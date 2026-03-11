@@ -211,6 +211,55 @@ export async function getEngagedUsers(
   };
 }
 
+// ── Single-page fetchers (for chunked fetch endpoint) ────────────────────────
+
+/** Fetch a single page of followers. Returns DIDs and the next cursor. */
+export async function fetchFollowerPage(
+  actor: string,
+  cursor?: string,
+  signal?: AbortSignal
+): Promise<{ dids: string[]; nextCursor?: string }> {
+  let url = `${BASE_URL}/app.bsky.graph.getFollowers?actor=${encodeURIComponent(actor)}&limit=100`;
+  if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+
+  const data = (await throttledFetch(url, signal)) as {
+    followers: Array<{ did: string }>;
+    cursor?: string;
+  };
+
+  return {
+    dids: (data.followers ?? []).map((f) => f.did),
+    nextCursor: data.cursor,
+  };
+}
+
+/** Fetch the author feed (list of post URIs). Used to seed engagement chunking. */
+export async function fetchAuthorFeedUris(
+  actor: string,
+  limit: number,
+  signal?: AbortSignal
+): Promise<string[]> {
+  const feed = await getAuthorFeed(actor, limit, signal);
+  return feed.map((item) => item.post.uri);
+}
+
+/** Fetch likes + reposts for a single post. Returns unique engager DIDs and counts. */
+export async function fetchPostEngagement(
+  postUri: string,
+  signal?: AbortSignal
+): Promise<{ dids: string[]; likes: number; reposts: number }> {
+  const [likers, reposters] = await Promise.all([
+    getPostLikes(postUri, signal),
+    getPostReposts(postUri, signal),
+  ]);
+  const unique = new Set([...likers, ...reposters]);
+  return {
+    dids: Array.from(unique),
+    likes: likers.length,
+    reposts: reposters.length,
+  };
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Accepts @handle, bsky.app/profile/handle, or bare handle */

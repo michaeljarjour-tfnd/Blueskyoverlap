@@ -108,7 +108,9 @@ async function fetchFollowerChunk(
       await saveProgress(did, tier, 'followers', { cursor, fetched, total });
       return json({ status: 'in_progress', fetched, total });
     }
-    throw err;
+    // Any other error (API 5xx, network, etc.) — save progress and let client retry
+    await saveProgress(did, tier, 'followers', { cursor, fetched, total });
+    return json({ status: 'in_progress', fetched, total });
   }
 
   // Time budget expired — save progress and return
@@ -179,7 +181,14 @@ async function fetchEngagementChunk(
       });
       return json({ status: 'in_progress', fetched: postIndex, total });
     }
-    throw err;
+    // Any other error — save progress and let client retry
+    await saveProgress(did, tier, 'engagement', {
+      fetched: postIndex,
+      total,
+      feedUris: JSON.stringify(feedUris),
+      postIndex,
+    });
+    return json({ status: 'in_progress', fetched: postIndex, total });
   }
 
   if (postIndex >= feedUris.length) {

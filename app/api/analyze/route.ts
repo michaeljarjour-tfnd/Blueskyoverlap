@@ -41,7 +41,7 @@ const MAX_OVERLAP_SAMPLE = 500;
 const SPEED_CONFIG: Record<SpeedTier, { maxFollowers: number | null; maxPosts: number }> = {
   quick:    { maxFollowers: 2000,  maxPosts: 20 },
   balanced: { maxFollowers: 5000,  maxPosts: 35 },
-  complete: { maxFollowers: null,  maxPosts: 60 },
+  complete: { maxFollowers: 1_000_000,  maxPosts: 60 },
 };
 
 // ── SSE helpers ────────────────────────────────────────────────────────────────
@@ -134,60 +134,66 @@ export async function POST(req: NextRequest) {
         }
         sendProgress(15);
 
-        const accountData = await Promise.all(
-          profiles.map(async (profile: BskyProfile, idx: number) => {
-            const [followerResult, engagementResult] = await Promise.all([
-              getOrFetchFollowers(
+        // Process accounts sequentially to avoid hammering the Bluesky API.
+        // Within each account, followers + engagement still run in parallel
+        // (the global concurrency limiter in api.ts caps at 5 in-flight requests).
+        const accountData: Array<{
+          profile: BskyProfile;
+          followers: Set<string>;
+          engagers: Set<string>;
+          stats: EngagementStats;
+        }> = [];
+
+        const perAccountPct = 70 / profiles.length; // spread 15%–85% across accounts
+
+        for (let idx = 0; idx < profiles.length; idx++) {
+          const profile = profiles[idx];
+          const basePct = 15 + Math.floor(idx * perAccountPct);
+
+          const [followerResult, engagementResult] = await Promise.all([
+            getOrFetchFollowers(
+              profile.did,
+              speedTier,
+              (fetched, max) => {
+                followerProgress[profile.did] = { fetched, max };
+                sendProgress(basePct);
+              },
+              abortController.signal
+            ),
+            // Cap each account's engagement at 35s so a slow fetch
+            // never blocks the follower-overlap result.
+            withTimeout(
+              getOrFetchEngagement(
                 profile.did,
                 speedTier,
-                (fetched, max) => {
-                  followerProgress[profile.did] = { fetched, max };
-                  sendProgress(20);
+                maxPosts,
+                (analyzed, total) => {
+                  postProgress[profile.did] = { analyzed, total };
+                  sendProgress(basePct);
                 },
                 abortController.signal
               ),
-              // Stagger engagement fetches, and cap each at 35 s so a slow
-              // engagement fetch never blocks the follower-overlap result.
-              (async () => {
-                if (idx > 0) await new Promise((r) => setTimeout(r, idx * 500));
-                return withTimeout(
-                  getOrFetchEngagement(
-                    profile.did,
-                    speedTier,
-                    maxPosts,
-                    (analyzed, total) => {
-                      postProgress[profile.did] = { analyzed, total };
-                      sendProgress(20);
-                    },
-                    abortController.signal
-                  ),
-                  35_000,
-                  EMPTY_ENGAGEMENT
-                );
-              })(),
-            ]);
+              35_000,
+              EMPTY_ENGAGEMENT
+            ),
+          ]);
 
-            // Mark complete at 100% without changing the denominator.
-            // Using Math.max(actual, maxPosts) was causing the bars to regress:
-            // callbacks establish the true total (feed.length), and bumping it
-            // back up to maxPosts drops the aggregate percentage visually.
-            // Instead, just set fetched=max and analyzed=total (whatever they are).
-            const curFolMax = followerProgress[profile.did]?.max ?? 1;
-            followerProgress[profile.did] = { fetched: curFolMax, max: curFolMax };
-            const curPostTotal = postProgress[profile.did]?.total ?? maxPosts;
-            postProgress[profile.did] = { analyzed: curPostTotal, total: curPostTotal };
-            sendProgress(20);
+          // Mark this account complete at 100%
+          const curFolMax = followerProgress[profile.did]?.max ?? 1;
+          followerProgress[profile.did] = { fetched: curFolMax, max: curFolMax };
+          const curPostTotal = postProgress[profile.did]?.total ?? maxPosts;
+          postProgress[profile.did] = { analyzed: curPostTotal, total: curPostTotal };
+          sendProgress(basePct + Math.floor(perAccountPct));
 
-            cacheStatus[profile.did] = followerResult.fromCache ? 'hit' : 'miss';
+          cacheStatus[profile.did] = followerResult.fromCache ? 'hit' : 'miss';
 
-            return {
-              profile,
-              followers: followerResult.set,
-              engagers: engagementResult.set,
-              stats: engagementResult.stats,
-            };
-          })
-        );
+          accountData.push({
+            profile,
+            followers: followerResult.set,
+            engagers: engagementResult.set,
+            stats: engagementResult.stats,
+          });
+        }
 
         // ── 3. Compute pairwise overlaps ──────────────────────────────────────
         send({ type: 'progress', message: 'Calculating overlaps...', pct: 85 });

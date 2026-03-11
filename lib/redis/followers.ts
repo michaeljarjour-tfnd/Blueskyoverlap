@@ -7,7 +7,7 @@ const TTL_SECONDS = 60 * 60 * 24; // 24 hours
 const SPEED_CAPS: Record<SpeedTier, number | null> = {
   quick: 2000,
   balanced: 5000,
-  complete: null,
+  complete: 1_000_000,
 };
 
 // ── Key helpers ────────────────────────────────────────────────────────────────

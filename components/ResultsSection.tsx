@@ -354,36 +354,66 @@ function CollapsiblePair({
 
 // ── Insights ───────────────────────────────────────────────────────────────────
 
-function InsightsPanel({ overlaps }: { overlaps: PairwiseOverlap[] }) {
+function generateInsights(overlaps: PairwiseOverlap[]): string[] {
   const insights: string[] = [];
 
   for (const o of overlaps) {
-    const j = o.followerJaccard;
     const a1 = o.account1.displayName || o.account1.handle;
     const a2 = o.account2.displayName || o.account2.handle;
+    const fj = o.followerJaccard;
+    const ej = o.engagementJaccard;
 
-    if (j > 40) {
+    // ── Strategic partnership framing based on overlap level ──
+    // Each tier teaches a different lesson about how partnerships create value.
+    if (fj > 40) {
       insights.push(
-        `${a1} and ${a2} share a very high audience overlap — they're essentially speaking to the same crowd. A collaboration would deepen existing relationships rather than expand reach.`
+        `${a1} and ${a2} are speaking to essentially the same crowd. Partnerships between highly overlapping audiences work best for credibility — a joint endorsement carries extra weight because both voices are already trusted. The growth play here is depth, not breadth.`
       );
-    } else if (j > 20) {
+    } else if (fj > 20) {
       insights.push(
-        `${a1} and ${a2} have significant audience crossover. Collaboration would reinforce credibility with a familiar audience while adding value to the overlap.`
+        `${a1} and ${a2} have strong audience crossover — their followers already know both names. This is the sweet spot for collaborative content: the shared audience acts as a built-in distribution engine, amplifying anything they do together to both sides.`
       );
-    } else if (j > 10) {
+    } else if (fj > 10) {
       insights.push(
-        `${a1} and ${a2} share a moderate audience. A collaboration offers meaningful new reach for both sides.`
+        `${a1} and ${a2} share enough audience to have natural credibility together, but most of their followers only know one of them. This is the ideal profile for a growth partnership — the shared slice provides social proof, while the unique audiences provide new reach.`
       );
-    } else if (j > 3) {
+    } else if (fj > 3) {
       insights.push(
-        `${a1} and ${a2} have low audience overlap — a collaboration here is a strong reach expansion play.`
+        `${a1} and ${a2} have largely separate audiences with a thin bridge between them. The small overlap means a few early adopters already follow both — they can become the seed audience that cross-pollinates a partnership to both sides.`
       );
     } else {
       insights.push(
-        `${a1} and ${a2} have almost no audience overlap. If the content is complementary, this is a powerful new-audience opportunity.`
+        `${a1} and ${a2} reach almost entirely different people. When audiences don't overlap, a partnership is a pure discovery play — every new follower gained is truly net-new. The risk is lower relevance, so content alignment matters more here than anywhere else.`
+      );
+    }
+
+    // ── Engagement vs follower divergence — teaches about content affinity ──
+    if (ej > fj + 8 && ej > 5) {
+      insights.push(
+        `The engagement overlap between ${a1} and ${a2} runs higher than the follower overlap. This is a strong signal — it means their active, engaged audiences share taste even when the broader follower bases don't fully overlap. Partnerships that tap into engaged audiences tend to convert better than ones that just reach passive followers.`
+      );
+    } else if (fj > ej + 10 && fj > 10) {
+      insights.push(
+        `${a1} and ${a2} share a notable number of followers, but their engagement audiences are more distinct. Shared followers aren't always shared attention — these audiences follow both but actively engage with different content styles. A partnership works best when each creator leads with their own voice rather than blending into one.`
+      );
+    }
+
+    // ── Asymmetric reach — teaches about leverage and mutual value ──
+    const pctDiff = Math.abs(o.followerOverlapPct1 - o.followerOverlapPct2);
+    if (pctDiff > 15 && fj > 2) {
+      const bigger = o.followerOverlapPct1 < o.followerOverlapPct2 ? a1 : a2;
+      const smaller = o.followerOverlapPct1 < o.followerOverlapPct2 ? a2 : a1;
+      insights.push(
+        `There's a size asymmetry here: ${bigger} brings a much larger unique audience to the table. For ${smaller}, the growth upside is significant. For ${bigger}, the value is different — partnering with a more focused creator often brings higher engagement quality and niche credibility. The best asymmetric partnerships recognize that both sides bring something the other can't buy.`
       );
     }
   }
+
+  return insights;
+}
+
+function InsightsPanel({ overlaps }: { overlaps: PairwiseOverlap[] }) {
+  const insights = generateInsights(overlaps);
 
   if (insights.length === 0) return null;
 

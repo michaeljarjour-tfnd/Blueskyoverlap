@@ -419,122 +419,188 @@ async function handlePrefetched(
   }
 
   try {
-    // Read all sets from Redis
-    const followerSets: Set<string>[] = [];
-    const engagementSets: Set<string>[] = [];
-    const engagementStats: EngagementStats[] = [];
-    const cacheStatus: Record<string, 'hit' | 'miss'> = {};
+    const n = profiles.length;
+    const uid = Math.random().toString(36).slice(2, 8);
 
+    // ── 1. Get all set sizes in one pipeline (no large data transfer) ────
+    const sizePipe = redis.pipeline();
     for (const did of dids) {
-      const folKey = `followers:${did}:${speedTier}`;
-      const engKey = `engagement:${did}:${speedTier}`;
+      sizePipe.scard(`followers:${did}:${speedTier}`);
+      sizePipe.scard(`engagement:${did}:${speedTier}`);
+      sizePipe.sismember(`engagement:${did}:${speedTier}`, '__empty__');
+    }
+    const sizeResults = await sizePipe.exec();
 
-      const [folMembers, engMembers] = await Promise.all([
-        redis.smembers(folKey) as Promise<string[]>,
-        redis.smembers(engKey) as Promise<string[]>,
-      ]);
-
-      followerSets.push(new Set(folMembers ?? []));
-      engagementSets.push(new Set((engMembers ?? []).filter(d => d !== '__empty__')));
-      engagementStats.push({ totalLikes: 0, totalReposts: 0, postsAnalyzed: 0 });
-      cacheStatus[did] = 'hit';
+    const folSizes: number[] = [];
+    const engSizes: number[] = [];
+    for (let i = 0; i < n; i++) {
+      folSizes.push((sizeResults[i * 3] as number) ?? 0);
+      const rawEngSize = (sizeResults[i * 3 + 1] as number) ?? 0;
+      const hasEmpty = (sizeResults[i * 3 + 2] as number) ?? 0;
+      engSizes.push(hasEmpty ? Math.max(0, rawEngSize - 1) : rawEngSize);
     }
 
-    // Compute pairwise overlaps (same logic as SSE path)
+    const cacheStatus: Record<string, 'hit' | 'miss'> = {};
+    for (const did of dids) cacheStatus[did] = 'hit';
+
+    // ── 2. Compute pairwise overlaps using Redis set operations ──────────
+    // All intersection computation happens server-side in Redis.
+    // Only counts and small samples come back over the wire.
     const overlapDetailStore: Record<string, { followerDids: string[]; engagementDids: string[] }> = {};
     const pairwiseOverlaps: PairwiseOverlap[] = [];
+    const pairFolInter: Record<string, number> = {};
+    const pairEngInter: Record<string, number> = {};
 
-    for (let i = 0; i < profiles.length; i++) {
-      for (let j = i + 1; j < profiles.length; j++) {
-        const folOverlapSet = new Set([...followerSets[i]].filter((x) => followerSets[j].has(x)));
-        const folUnion = new Set([...followerSets[i], ...followerSets[j]]);
-        const followerJaccard = folUnion.size > 0 ? (folOverlapSet.size / folUnion.size) * 100 : 0;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const folKey1 = `followers:${dids[i]}:${speedTier}`;
+        const folKey2 = `followers:${dids[j]}:${speedTier}`;
+        const engKey1 = `engagement:${dids[i]}:${speedTier}`;
+        const engKey2 = `engagement:${dids[j]}:${speedTier}`;
+        const tmpFol = `tmp:${uid}:fol:${i}:${j}`;
+        const tmpEng = `tmp:${uid}:eng:${i}:${j}`;
 
-        const engOverlapSet = new Set([...engagementSets[i]].filter((x) => engagementSets[j].has(x)));
-        const engUnion = new Set([...engagementSets[i], ...engagementSets[j]]);
-        const engagementJaccard = engUnion.size > 0 ? (engOverlapSet.size / engUnion.size) * 100 : 0;
+        // Compute intersections server-side in Redis
+        const interPipe = redis.pipeline();
+        interPipe.sinterstore(tmpFol, folKey1, folKey2);
+        interPipe.sinterstore(tmpEng, engKey1, engKey2);
+        await interPipe.exec();
 
-        const followerSample: string[] = [];
-        for (const did of folOverlapSet) {
-          followerSample.push(did);
-          if (followerSample.length >= MAX_OVERLAP_SAMPLE) break;
-        }
-        const engagementSample: string[] = [];
-        for (const did of engOverlapSet) {
-          engagementSample.push(did);
-          if (engagementSample.length >= MAX_OVERLAP_SAMPLE) break;
-        }
+        // Read counts + samples
+        const readPipe = redis.pipeline();
+        readPipe.scard(tmpFol);
+        readPipe.scard(tmpEng);
+        readPipe.srandmember(tmpFol, MAX_OVERLAP_SAMPLE);
+        readPipe.srandmember(tmpEng, MAX_OVERLAP_SAMPLE);
+        const readResults = await readPipe.exec();
+
+        // Clean up temp keys
+        await redis.del(tmpFol, tmpEng);
+
+        const folOverlap = (readResults[0] as number) ?? 0;
+        const engOverlapRaw = (readResults[1] as number) ?? 0;
+        const folSample = (readResults[2] as string[]) ?? [];
+        const engSampleRaw = (readResults[3] as string[]) ?? [];
+        const hasEmptyInIntersection = engSampleRaw.includes('__empty__');
+        const engSample = engSampleRaw.filter(d => d !== '__empty__');
+        const engOverlap = hasEmptyInIntersection ? Math.max(0, engOverlapRaw - 1) : engOverlapRaw;
+
+        pairFolInter[`${i}:${j}`] = folOverlap;
+        pairEngInter[`${i}:${j}`] = engOverlap;
+
+        const folUnion = folSizes[i] + folSizes[j] - folOverlap;
+        const followerJaccard = folUnion > 0 ? (folOverlap / folUnion) * 100 : 0;
+        const engUnion = engSizes[i] + engSizes[j] - engOverlap;
+        const engagementJaccard = engUnion > 0 ? (engOverlap / engUnion) * 100 : 0;
 
         const overlapId = `${profiles[i].did}-${profiles[j].did}`;
-        overlapDetailStore[overlapId] = { followerDids: followerSample, engagementDids: engagementSample };
+        overlapDetailStore[overlapId] = { followerDids: folSample, engagementDids: engSample };
 
         pairwiseOverlaps.push({
           id: overlapId,
           account1: profiles[i],
           account2: profiles[j],
-          followers1: followerSets[i].size,
-          followers2: followerSets[j].size,
-          followerOverlap: folOverlapSet.size,
-          followerOverlapPct1: followerSets[i].size > 0 ? (folOverlapSet.size / followerSets[i].size) * 100 : 0,
-          followerOverlapPct2: followerSets[j].size > 0 ? (folOverlapSet.size / followerSets[j].size) * 100 : 0,
+          followers1: folSizes[i],
+          followers2: folSizes[j],
+          followerOverlap: folOverlap,
+          followerOverlapPct1: folSizes[i] > 0 ? (folOverlap / folSizes[i]) * 100 : 0,
+          followerOverlapPct2: folSizes[j] > 0 ? (folOverlap / folSizes[j]) * 100 : 0,
           followerJaccard,
-          uniqueFollowers1: followerSets[i].size - folOverlapSet.size,
-          uniqueFollowers2: followerSets[j].size - folOverlapSet.size,
-          engaged1: engagementSets[i].size,
-          engaged2: engagementSets[j].size,
-          engagementOverlap: engOverlapSet.size,
-          engagementOverlapPct1: engagementSets[i].size > 0 ? (engOverlapSet.size / engagementSets[i].size) * 100 : 0,
-          engagementOverlapPct2: engagementSets[j].size > 0 ? (engOverlapSet.size / engagementSets[j].size) * 100 : 0,
+          uniqueFollowers1: folSizes[i] - folOverlap,
+          uniqueFollowers2: folSizes[j] - folOverlap,
+          engaged1: engSizes[i],
+          engaged2: engSizes[j],
+          engagementOverlap: engOverlap,
+          engagementOverlapPct1: engSizes[i] > 0 ? (engOverlap / engSizes[i]) * 100 : 0,
+          engagementOverlapPct2: engSizes[j] > 0 ? (engOverlap / engSizes[j]) * 100 : 0,
           engagementJaccard,
-          uniqueEngaged1: engagementSets[i].size - engOverlapSet.size,
-          uniqueEngaged2: engagementSets[j].size - engOverlapSet.size,
-          overlap: engOverlapSet.size,
-          overlapPct1: engagementSets[i].size > 0 ? (engOverlapSet.size / engagementSets[i].size) * 100 : 0,
-          overlapPct2: engagementSets[j].size > 0 ? (engOverlapSet.size / engagementSets[j].size) * 100 : 0,
+          uniqueEngaged1: engSizes[i] - engOverlap,
+          uniqueEngaged2: engSizes[j] - engOverlap,
+          overlap: engOverlap,
+          overlapPct1: engSizes[i] > 0 ? (engOverlap / engSizes[i]) * 100 : 0,
+          overlapPct2: engSizes[j] > 0 ? (engOverlap / engSizes[j]) * 100 : 0,
           jaccard: engagementJaccard,
-          unique1: engagementSets[i].size - engOverlapSet.size,
-          unique2: engagementSets[j].size - engOverlapSet.size,
+          unique1: engSizes[i] - engOverlap,
+          unique2: engSizes[j] - engOverlap,
         });
       }
     }
 
-    // Three-way overlap
+    // ── 3. Three-way overlap ─────────────────────────────────────────────
     let threeWayOverlap = null;
-    if (profiles.length >= 3) {
-      const fs0 = followerSets[0], fs1 = followerSets[1], fs2 = followerSets[2];
-      const es0 = engagementSets[0], es1 = engagementSets[1], es2 = engagementSets[2];
+    if (n >= 3) {
+      const folKeys = dids.slice(0, 3).map(d => `followers:${d}:${speedTier}`);
+      const engKeys = dids.slice(0, 3).map(d => `engagement:${d}:${speedTier}`);
+      const tmpFol3 = `tmp:${uid}:fol3`;
+      const tmpEng3 = `tmp:${uid}:eng3`;
 
-      const folThreeArr = [...fs0].filter((x) => fs1.has(x) && fs2.has(x));
-      const engThreeArr = [...es0].filter((x) => es1.has(x) && es2.has(x));
-      const folUnionSize = new Set([...fs0, ...fs1, ...fs2]).size;
-      const engUnionSize = new Set([...es0, ...es1, ...es2]).size;
+      const threePipe = redis.pipeline();
+      threePipe.sinterstore(tmpFol3, ...folKeys as [string, ...string[]]);
+      threePipe.sinterstore(tmpEng3, ...engKeys as [string, ...string[]]);
+      await threePipe.exec();
+
+      const read3Pipe = redis.pipeline();
+      read3Pipe.scard(tmpFol3);
+      read3Pipe.scard(tmpEng3);
+      read3Pipe.srandmember(tmpFol3, MAX_OVERLAP_SAMPLE);
+      read3Pipe.srandmember(tmpEng3, MAX_OVERLAP_SAMPLE);
+      const read3Results = await read3Pipe.exec();
+
+      await redis.del(tmpFol3, tmpEng3);
+
+      const folThreeCount = (read3Results[0] as number) ?? 0;
+      const engThreeCountRaw = (read3Results[1] as number) ?? 0;
+      const folThreeSample = (read3Results[2] as string[]) ?? [];
+      const engThreeSampleRaw = (read3Results[3] as string[]) ?? [];
+      const engThreeSample = engThreeSampleRaw.filter(d => d !== '__empty__');
+      const engThreeCount = engThreeSampleRaw.includes('__empty__')
+        ? Math.max(0, engThreeCountRaw - 1)
+        : engThreeCountRaw;
 
       overlapDetailStore['three-way'] = {
-        followerDids: folThreeArr.slice(0, MAX_OVERLAP_SAMPLE),
-        engagementDids: engThreeArr.slice(0, MAX_OVERLAP_SAMPLE),
+        followerDids: folThreeSample,
+        engagementDids: engThreeSample,
       };
 
+      // Union sizes via inclusion-exclusion:
+      // |A ∪ B ∪ C| = |A| + |B| + |C| - |A∩B| - |A∩C| - |B∩C| + |A∩B∩C|
+      const folUnionSize = folSizes[0] + folSizes[1] + folSizes[2]
+        - (pairFolInter['0:1'] ?? 0)
+        - (pairFolInter['0:2'] ?? 0)
+        - (pairFolInter['1:2'] ?? 0)
+        + folThreeCount;
+      const engUnionSize = engSizes[0] + engSizes[1] + engSizes[2]
+        - (pairEngInter['0:1'] ?? 0)
+        - (pairEngInter['0:2'] ?? 0)
+        - (pairEngInter['1:2'] ?? 0)
+        + engThreeCount;
+
       threeWayOverlap = {
-        follower: folThreeArr.length,
-        engagement: engThreeArr.length,
-        followerJaccard: folUnionSize > 0 ? (folThreeArr.length / folUnionSize) * 100 : 0,
-        engagementJaccard: engUnionSize > 0 ? (engThreeArr.length / engUnionSize) * 100 : 0,
+        follower: folThreeCount,
+        engagement: engThreeCount,
+        followerJaccard: folUnionSize > 0 ? (folThreeCount / folUnionSize) * 100 : 0,
+        engagementJaccard: engUnionSize > 0 ? (engThreeCount / engUnionSize) * 100 : 0,
         profiles: [profiles[0], profiles[1], profiles[2]],
         followerPcts: [
-          fs0.size > 0 ? (folThreeArr.length / fs0.size) * 100 : 0,
-          fs1.size > 0 ? (folThreeArr.length / fs1.size) * 100 : 0,
-          fs2.size > 0 ? (folThreeArr.length / fs2.size) * 100 : 0,
+          folSizes[0] > 0 ? (folThreeCount / folSizes[0]) * 100 : 0,
+          folSizes[1] > 0 ? (folThreeCount / folSizes[1]) * 100 : 0,
+          folSizes[2] > 0 ? (folThreeCount / folSizes[2]) * 100 : 0,
         ],
         engagementPcts: [
-          es0.size > 0 ? (engThreeArr.length / es0.size) * 100 : 0,
-          es1.size > 0 ? (engThreeArr.length / es1.size) * 100 : 0,
-          es2.size > 0 ? (engThreeArr.length / es2.size) * 100 : 0,
+          engSizes[0] > 0 ? (engThreeCount / engSizes[0]) * 100 : 0,
+          engSizes[1] > 0 ? (engThreeCount / engSizes[1]) * 100 : 0,
+          engSizes[2] > 0 ? (engThreeCount / engSizes[2]) * 100 : 0,
         ],
       };
     }
 
+    // ── 4. Collaboration values ──────────────────────────────────────────
+    const engagementStats: EngagementStats[] = dids.map(() => ({
+      totalLikes: 0, totalReposts: 0, postsAnalyzed: 0,
+    }));
     const collaborationValues = calculateCollaborationValue(
-      profiles, engagementSets, pairwiseOverlaps, true, engagementStats, intent
+      profiles, null, pairwiseOverlaps, true, engagementStats, intent,
+      engSizes
     );
 
     const result: AnalysisResult = {

@@ -20,14 +20,15 @@ interface AudienceData {
  */
 export function calculateCollaborationValue(
   profiles: BskyProfile[],
-  audienceSets: Array<Set<string>>,
+  audienceSets: Array<Set<string>> | null,
   pairwiseOverlaps: PairwiseOverlap[],
   isEngagementAnalysis: boolean,
   engagementStats: EngagementStats[] | null,
-  intent: AnalysisIntent
+  intent: AnalysisIntent,
+  audienceSizes?: number[]
 ): CollaborationValue[] {
   const collaborationData: AudienceData[] = profiles.map((profile, idx) => {
-    const audienceSize = audienceSets[idx].size;
+    const audienceSize = audienceSizes?.[idx] ?? audienceSets?.[idx]?.size ?? 0;
     let engagementRate = 0;
 
     if (isEngagementAnalysis && engagementStats?.[idx]) {

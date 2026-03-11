@@ -60,6 +60,7 @@ interface Props {
   speedTier?: SpeedTier;
   fetchPhase?: ChunkedFetchPhase;
   timeEstimate?: number | null; // seconds remaining
+  accountCount?: number;
 }
 
 export default function ProgressPanel({
@@ -69,6 +70,7 @@ export default function ProgressPanel({
   speedTier,
   fetchPhase,
   timeEstimate,
+  accountCount,
 }: Props) {
   const [displayWord, setDisplayWord] = useState('Fetching');
   const [typedChars, setTypedChars] = useState(0);
@@ -235,7 +237,7 @@ export default function ProgressPanel({
         </div>
       </div>
 
-      {/* Time estimate + resumable note (complete tier only) */}
+      {/* Summary + time estimate (complete tier only) */}
       {isChunked && (
         <div
           style={{
@@ -243,21 +245,21 @@ export default function ProgressPanel({
             fontSize: 11,
             color: 'var(--color-text-faint)',
             fontFamily: 'var(--font-mono)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
           }}
         >
-          <span>
-            {timeEstimate != null && timeEstimate > 0
-              ? formatTimeEstimate(timeEstimate)
-              : fetchPhase === 'computing'
-                ? 'Almost done...'
-                : ''}
-          </span>
-          <span style={{ opacity: 0.7 }}>
+          {/* Summary line: "320K followers across 3 accounts — ~4 min remaining" */}
+          {folTotal > 0 && (
+            <div style={{ marginBottom: 4 }}>
+              {formatNumber(folTotal)} followers across {accountCount ?? folEntries.length} accounts
+              {timeEstimate != null && timeEstimate > 0 && (
+                <> — {formatTimeEstimate(timeEstimate)}</>
+              )}
+              {fetchPhase === 'computing' && ' — Almost done...'}
+            </div>
+          )}
+          <div style={{ opacity: 0.7 }}>
             Progress is saved — you can close this tab
-          </span>
+          </div>
         </div>
       )}
     </div>

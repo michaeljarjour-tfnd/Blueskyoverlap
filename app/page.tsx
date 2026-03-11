@@ -178,6 +178,52 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+const CHUNK_MAX_RETRIES = 3;
+
+/** Fetch a single chunk with retries on 500 errors. Throws on non-retryable errors. */
+async function fetchChunkWithRetry(
+  body: Record<string, unknown>,
+  signal: AbortSignal
+): Promise<FetchChunkResponse> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < CHUNK_MAX_RETRIES; attempt++) {
+    if (signal.aborted) throw new DOMException('Analysis cancelled', 'AbortError');
+
+    try {
+      const res = await fetch('/api/fetch-chunk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal,
+      });
+
+      if (res.ok) {
+        return (await res.json()) as FetchChunkResponse;
+      }
+
+      // 4xx errors are not retryable (bad request, etc.)
+      if (res.status >= 400 && res.status < 500) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? `Chunk failed: ${res.statusText}`);
+      }
+
+      // 5xx errors — retry after a short delay
+      lastError = new Error(`Server error ${res.status}`);
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') throw err;
+      // Network errors (Vercel timeout, connection reset) — retryable
+      lastError = err as Error;
+    }
+
+    if (attempt < CHUNK_MAX_RETRIES - 1) {
+      await sleep(1000 * (attempt + 1));
+    }
+  }
+
+  throw lastError ?? new Error('Chunk fetch failed after retries');
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -320,24 +366,12 @@ export default function Home() {
           while (true) {
             if (ctrl.signal.aborted) return;
 
-            const res = await fetch('/api/fetch-chunk', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                did,
-                tier: 'complete',
-                dataType: 'followers',
-                totalFollowers,
-              }),
-              signal: ctrl.signal,
-            });
-
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({}));
-              throw new Error((err as { error?: string }).error ?? `Fetch chunk failed: ${res.statusText}`);
-            }
-
-            const chunk = (await res.json()) as FetchChunkResponse;
+            const chunk = await fetchChunkWithRetry({
+              did,
+              tier: 'complete',
+              dataType: 'followers',
+              totalFollowers,
+            }, ctrl.signal);
 
             // Update progress
             folProgress[did] = { fetched: chunk.fetched, max: chunk.total || totalFollowers };
@@ -376,24 +410,12 @@ export default function Home() {
           while (true) {
             if (ctrl.signal.aborted) return;
 
-            const res = await fetch('/api/fetch-chunk', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                did,
-                tier: 'complete',
-                dataType: 'engagement',
-                maxPosts: 60,
-              }),
-              signal: ctrl.signal,
-            });
-
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({}));
-              throw new Error((err as { error?: string }).error ?? `Engagement chunk failed: ${res.statusText}`);
-            }
-
-            const chunk = (await res.json()) as FetchChunkResponse;
+            const chunk = await fetchChunkWithRetry({
+              did,
+              tier: 'complete',
+              dataType: 'engagement',
+              maxPosts: 60,
+            }, ctrl.signal);
 
             postProgress[did] = { analyzed: chunk.fetched, total: chunk.total || 60 };
             const postDone = Object.values(postProgress).reduce((s, v) => s + v.analyzed, 0);
@@ -519,6 +541,7 @@ export default function Home() {
           speedTier={activeSpeedTier}
           fetchPhase={fetchPhase}
           timeEstimate={timeEstimate}
+          accountCount={activeHandles.length}
         />
       )}
 

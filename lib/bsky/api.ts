@@ -14,21 +14,32 @@ async function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function fetchWithRetry(url: string, signal?: AbortSignal): Promise<unknown> {
+async function fetchWithRetry(
+  url: string,
+  signal?: AbortSignal,
+  deadline?: number
+): Promise<unknown> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (signal?.aborted) throw new DOMException('Analysis cancelled', 'AbortError');
+    if (deadline && Date.now() >= deadline) {
+      throw new Error('TIME_BUDGET_EXCEEDED');
+    }
 
     try {
       const res = await fetch(url, { signal });
 
       if (res.status === 429) {
         const retryAfter = res.headers.get('Retry-After');
-        const delay = retryAfter
+        const desiredDelay = retryAfter
           ? Math.min(parseInt(retryAfter, 10) * 1000, 30_000)
           : Math.min(1000 * 2 ** attempt, 15_000);
-        await sleep(delay);
+        // If the delay would exceed our deadline, bail out now
+        if (deadline && Date.now() + desiredDelay >= deadline) {
+          throw new Error('TIME_BUDGET_EXCEEDED');
+        }
+        await sleep(desiredDelay);
         continue;
       }
 
@@ -39,9 +50,14 @@ async function fetchWithRetry(url: string, signal?: AbortSignal): Promise<unknow
       return await res.json();
     } catch (err) {
       if ((err as Error).name === 'AbortError') throw err;
+      if ((err as Error).message === 'TIME_BUDGET_EXCEEDED') throw err;
       lastError = err as Error;
       if (attempt < MAX_RETRIES) {
-        await sleep(Math.min(1500 * (attempt + 1), 10_000));
+        const desiredDelay = Math.min(1500 * (attempt + 1), 10_000);
+        if (deadline && Date.now() + desiredDelay >= deadline) {
+          throw new Error('TIME_BUDGET_EXCEEDED');
+        }
+        await sleep(desiredDelay);
       }
     }
   }
@@ -50,8 +66,8 @@ async function fetchWithRetry(url: string, signal?: AbortSignal): Promise<unknow
 }
 
 /** Throttled fetch — all Bluesky API calls go through the concurrency limiter */
-function throttledFetch(url: string, signal?: AbortSignal): Promise<unknown> {
-  return apiLimit(() => fetchWithRetry(url, signal));
+function throttledFetch(url: string, signal?: AbortSignal, deadline?: number): Promise<unknown> {
+  return apiLimit(() => fetchWithRetry(url, signal, deadline));
 }
 
 // ── Profile ────────────────────────────────────────────────────────────────────
@@ -134,35 +150,41 @@ export async function fetchFollowers(
 async function getAuthorFeed(
   actor: string,
   limit: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  deadline?: number
 ): Promise<Array<{ post: { uri: string } }>> {
   const data = (await throttledFetch(
     `${BASE_URL}/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(actor)}&limit=${Math.min(limit, 100)}`,
-    signal
+    signal,
+    deadline
   )) as { feed: Array<{ post: { uri: string } }> };
   return data.feed ?? [];
 }
 
-async function getPostLikes(postUri: string, signal?: AbortSignal): Promise<string[]> {
+async function getPostLikes(postUri: string, signal?: AbortSignal, deadline?: number): Promise<string[]> {
   try {
     const data = (await throttledFetch(
       `${BASE_URL}/app.bsky.feed.getLikes?uri=${encodeURIComponent(postUri)}&limit=100`,
-      signal
+      signal,
+      deadline
     )) as { likes: Array<{ actor: { did: string } }> };
     return (data.likes ?? []).map((l) => l.actor.did);
-  } catch {
+  } catch (err) {
+    if ((err as Error).message === 'TIME_BUDGET_EXCEEDED') throw err;
     return [];
   }
 }
 
-async function getPostReposts(postUri: string, signal?: AbortSignal): Promise<string[]> {
+async function getPostReposts(postUri: string, signal?: AbortSignal, deadline?: number): Promise<string[]> {
   try {
     const data = (await throttledFetch(
       `${BASE_URL}/app.bsky.feed.getRepostedBy?uri=${encodeURIComponent(postUri)}&limit=100`,
-      signal
+      signal,
+      deadline
     )) as { repostedBy: Array<{ did: string }> };
     return (data.repostedBy ?? []).map((u) => u.did);
-  } catch {
+  } catch (err) {
+    if ((err as Error).message === 'TIME_BUDGET_EXCEEDED') throw err;
     return [];
   }
 }
@@ -217,12 +239,13 @@ export async function getEngagedUsers(
 export async function fetchFollowerPage(
   actor: string,
   cursor?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  deadline?: number
 ): Promise<{ dids: string[]; nextCursor?: string }> {
   let url = `${BASE_URL}/app.bsky.graph.getFollowers?actor=${encodeURIComponent(actor)}&limit=100`;
   if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
 
-  const data = (await throttledFetch(url, signal)) as {
+  const data = (await throttledFetch(url, signal, deadline)) as {
     followers: Array<{ did: string }>;
     cursor?: string;
   };
@@ -237,20 +260,22 @@ export async function fetchFollowerPage(
 export async function fetchAuthorFeedUris(
   actor: string,
   limit: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  deadline?: number
 ): Promise<string[]> {
-  const feed = await getAuthorFeed(actor, limit, signal);
+  const feed = await getAuthorFeed(actor, limit, signal, deadline);
   return feed.map((item) => item.post.uri);
 }
 
 /** Fetch likes + reposts for a single post. Returns unique engager DIDs and counts. */
 export async function fetchPostEngagement(
   postUri: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  deadline?: number
 ): Promise<{ dids: string[]; likes: number; reposts: number }> {
   const [likers, reposters] = await Promise.all([
-    getPostLikes(postUri, signal),
-    getPostReposts(postUri, signal),
+    getPostLikes(postUri, signal, deadline),
+    getPostReposts(postUri, signal, deadline),
   ]);
   const unique = new Set([...likers, ...reposters]);
   return {

@@ -1,4 +1,5 @@
 import type { BskyProfile, EngagementStats } from '@/lib/types';
+import { MinHashSignature } from '@/lib/analysis/minhash';
 import pLimit from 'p-limit';
 
 const BASE_URL = 'https://public.api.bsky.app/xrpc';
@@ -231,6 +232,51 @@ export async function getEngagedUsers(
       postsAnalyzed: feed.length,
     },
   };
+}
+
+// ── MinHash follower streaming ────────────────────────────────────────────────
+
+/**
+ * Stream followers through a MinHash signature instead of collecting into a Set.
+ * Returns the signature + count of followers processed.
+ */
+export async function fetchFollowersMinHash(
+  actor: string,
+  maxPages: number,
+  k: number,
+  onProgress?: (fetched: number, max: number) => void,
+  signal?: AbortSignal
+): Promise<{ signature: number[]; count: number }> {
+  const sig = new MinHashSignature(k);
+  let cursor: string | undefined;
+  let count = 0;
+  let pages = 0;
+
+  while (pages < maxPages) {
+    if (signal?.aborted) throw new DOMException('Analysis cancelled', 'AbortError');
+
+    let url = `${BASE_URL}/app.bsky.graph.getFollowers?actor=${encodeURIComponent(actor)}&limit=100`;
+    if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+
+    const data = (await throttledFetch(url, signal)) as {
+      followers: Array<{ did: string }>;
+      cursor?: string;
+    };
+
+    for (const f of data.followers ?? []) {
+      sig.update(f.did);
+      count++;
+    }
+
+    pages++;
+    onProgress?.(count, maxPages * 100); // estimate max from pages
+
+    cursor = data.cursor;
+    if (!cursor) break;
+    if (cursor) await sleep(100);
+  }
+
+  return { signature: sig.toArray(), count };
 }
 
 // ── Single-page fetchers (for chunked fetch endpoint) ────────────────────────

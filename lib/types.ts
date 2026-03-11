@@ -42,6 +42,8 @@ export interface PairwiseOverlap {
   engagementJaccard: number;
   uniqueEngaged1: number;
   uniqueEngaged2: number;
+  isEstimated?: boolean;
+  estimationMethod?: 'minhash' | 'exact';
   // Legacy aliases (engagement fields) — kept for UI compat
   overlap: number;
   overlapPct1: number;

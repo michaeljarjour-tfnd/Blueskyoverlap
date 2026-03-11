@@ -1,12 +1,12 @@
 import { getRedis } from './client';
-import { fetchFollowers, getEngagedUsers } from '@/lib/bsky/api';
+import { fetchFollowers, getEngagedUsers, fetchFollowersMinHash } from '@/lib/bsky/api';
 import type { SpeedTier, EngagementStats } from '@/lib/types';
 
 const TTL_SECONDS = 60 * 60 * 24; // 24 hours
 
 const SPEED_CAPS: Record<SpeedTier, number | null> = {
-  quick: 2000,
-  balanced: 5000,
+  quick: 5000,
+  balanced: 10000,
   complete: 1_000_000,
 };
 
@@ -143,4 +143,71 @@ export async function isCached(did: string, tier: SpeedTier): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ── MinHash signature caching ────────────────────────────────────────────────
+
+const MINHASH_K: Record<SpeedTier, number> = {
+  quick: 256,
+  balanced: 512,
+  complete: 0, // Complete uses exact sets, not MinHash
+};
+
+const MINHASH_MAX_PAGES: Record<SpeedTier, number> = {
+  quick: 50,     // ~5K followers
+  balanced: 100, // ~10K followers
+  complete: 0,
+};
+
+function minhashKey(did: string, tier: SpeedTier) {
+  return `minhash:${did}:${tier}`;
+}
+
+export interface MinHashResult {
+  signature: number[];
+  count: number;
+  fromCache: boolean;
+}
+
+/**
+ * Returns the cached MinHash signature or fetches + caches it.
+ * Used for Quick/Balanced tiers instead of full follower sets.
+ */
+export async function getOrFetchMinHash(
+  did: string,
+  tier: SpeedTier,
+  onProgress?: (fetched: number, max: number) => void,
+  signal?: AbortSignal
+): Promise<MinHashResult> {
+  const redis = getRedis();
+  const key = minhashKey(did, tier);
+  const k = MINHASH_K[tier];
+  const maxPages = MINHASH_MAX_PAGES[tier];
+
+  if (redis) {
+    try {
+      const cached = await redis.get(key) as { signature: number[]; count: number } | null;
+      if (cached && cached.signature) {
+        onProgress?.(cached.count, cached.count);
+        return { ...cached, fromCache: true };
+      }
+    } catch {
+      // Fall through to fresh fetch
+    }
+  }
+
+  const result = await fetchFollowersMinHash(did, maxPages, k, onProgress, signal);
+
+  // Fire-and-forget cache write
+  if (redis) {
+    void (async () => {
+      try {
+        await redis.set(key, result, { ex: TTL_SECONDS });
+      } catch {
+        // Non-fatal
+      }
+    })();
+  }
+
+  return { ...result, fromCache: false };
 }

@@ -258,7 +258,7 @@ export default function ProgressPanel({
             </div>
           )}
           <div style={{ opacity: 0.7 }}>
-            Progress is saved — you can close this tab
+            Large accounts may take several minutes
           </div>
         </div>
       )}

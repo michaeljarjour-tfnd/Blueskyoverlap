@@ -11,6 +11,7 @@ import type {
   SpeedTier,
   AnalysisResult,
   EngagementStats,
+  AnalysisIntent,
 } from '@/lib/types';
 
 // Race a promise against a timeout. On timeout, returns the fallback value.
@@ -599,7 +600,7 @@ async function handlePrefetched(
       totalLikes: 0, totalReposts: 0, postsAnalyzed: 0,
     }));
     const collaborationValues = calculateCollaborationValue(
-      profiles, null, pairwiseOverlaps, true, engagementStats, intent,
+      profiles, null, pairwiseOverlaps, true, engagementStats, intent as AnalysisIntent,
       engSizes
     );
 

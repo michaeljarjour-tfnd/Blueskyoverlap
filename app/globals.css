@@ -1,9 +1,9 @@
+/* ── Google Fonts ──────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Serif+Display:ital@0;1&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* ── Google Fonts ──────────────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Serif+Display:ital@0;1&display=swap');
 
 /* ── Design tokens ────────────────────────────────────────────────────────── */
 :root {
@@ -423,21 +423,6 @@ html, body {
   transition: width 0.3s ease;
 }
 
-/* ── Heatmap ───────────────────────────────────────────────────────────────── */
-.heatmap-cell {
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: transform 0.1s, box-shadow 0.1s;
-  font-size: 12px;
-  font-weight: 600;
-}
-.heatmap-cell:hover {
-  transform: scale(1.05);
-  box-shadow: 0 2px 8px rgba(3,78,173,0.18);
-}
 
 /* ── Modal backdrop ────────────────────────────────────────────────────────── */
 .modal-backdrop {

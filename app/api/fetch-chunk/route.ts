@@ -47,11 +47,12 @@ export async function POST(req: NextRequest) {
   }
 
   const startTime = Date.now();
+  const deadline = startTime + TIME_BUDGET_MS;
 
   if (dataType === 'followers') {
-    return await fetchFollowerChunk(did, tier, startTime, totalFollowers);
+    return await fetchFollowerChunk(did, tier, startTime, deadline, totalFollowers);
   } else {
-    return await fetchEngagementChunk(did, tier, maxPosts, startTime);
+    return await fetchEngagementChunk(did, tier, maxPosts, startTime, deadline);
   }
 }
 
@@ -61,6 +62,7 @@ async function fetchFollowerChunk(
   did: string,
   tier: SpeedTier,
   startTime: number,
+  deadline: number,
   totalFollowers?: number
 ): Promise<Response> {
   const cap = SPEED_CAPS[tier];
@@ -72,8 +74,8 @@ async function fetchFollowerChunk(
   let pagesThisChunk = 0;
 
   try {
-    while (Date.now() - startTime < TIME_BUDGET_MS) {
-      const page = await fetchFollowerPage(did, cursor, undefined);
+    while (Date.now() < deadline) {
+      const page = await fetchFollowerPage(did, cursor, undefined, deadline);
 
       if (page.dids.length > 0) {
         await addToPartialSet(did, tier, 'followers', page.dids);
@@ -91,7 +93,7 @@ async function fetchFollowerChunk(
       }
 
       // Small delay between pages to avoid rate limits
-      if (Date.now() - startTime < TIME_BUDGET_MS - 500) {
+      if (Date.now() < deadline - 500) {
         await new Promise((r) => setTimeout(r, FOLLOWER_PAGE_DELAY));
       }
     }
@@ -100,6 +102,11 @@ async function fetchFollowerChunk(
     if ((err as Error).message?.includes('HTTP 400')) {
       await cleanupPartial(did, tier, 'followers');
       return json({ status: 'in_progress', fetched: 0, total });
+    }
+    // Time budget exceeded inside a fetch — save progress gracefully
+    if ((err as Error).message === 'TIME_BUDGET_EXCEEDED') {
+      await saveProgress(did, tier, 'followers', { cursor, fetched, total });
+      return json({ status: 'in_progress', fetched, total });
     }
     throw err;
   }
@@ -115,7 +122,8 @@ async function fetchEngagementChunk(
   did: string,
   tier: SpeedTier,
   maxPosts: number,
-  startTime: number
+  startTime: number,
+  deadline: number
 ): Promise<Response> {
   const progress = await getProgress(did, tier, 'engagement');
 
@@ -128,7 +136,7 @@ async function fetchEngagementChunk(
     postIndex = progress.postIndex ?? 0;
   } else {
     // First chunk — fetch the feed to get post URIs
-    feedUris = await fetchAuthorFeedUris(did, maxPosts, undefined);
+    feedUris = await fetchAuthorFeedUris(did, maxPosts, undefined, deadline);
     postIndex = 0;
 
     if (feedUris.length === 0) {
@@ -142,8 +150,8 @@ async function fetchEngagementChunk(
   const total = feedUris.length;
 
   try {
-    while (postIndex < feedUris.length && Date.now() - startTime < TIME_BUDGET_MS) {
-      const result = await fetchPostEngagement(feedUris[postIndex], undefined);
+    while (postIndex < feedUris.length && Date.now() < deadline) {
+      const result = await fetchPostEngagement(feedUris[postIndex], undefined, deadline);
 
       if (result.dids.length > 0) {
         await addToPartialSet(did, tier, 'engagement', result.dids);
@@ -152,7 +160,7 @@ async function fetchEngagementChunk(
       postIndex++;
 
       // Delay between posts
-      if (postIndex < feedUris.length && Date.now() - startTime < TIME_BUDGET_MS - 500) {
+      if (postIndex < feedUris.length && Date.now() < deadline - 500) {
         await new Promise((r) => setTimeout(r, 200));
       }
     }
@@ -160,6 +168,16 @@ async function fetchEngagementChunk(
     if ((err as Error).message?.includes('HTTP 400')) {
       await cleanupPartial(did, tier, 'engagement');
       return json({ status: 'in_progress', fetched: 0, total });
+    }
+    // Time budget exceeded inside a fetch — save progress gracefully
+    if ((err as Error).message === 'TIME_BUDGET_EXCEEDED') {
+      await saveProgress(did, tier, 'engagement', {
+        fetched: postIndex,
+        total,
+        feedUris: JSON.stringify(feedUris),
+        postIndex,
+      });
+      return json({ status: 'in_progress', fetched: postIndex, total });
     }
     throw err;
   }

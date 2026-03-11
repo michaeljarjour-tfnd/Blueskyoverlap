@@ -540,8 +540,6 @@ export default function Home() {
           postProgress={progress.postProgress}
           speedTier={activeSpeedTier}
           fetchPhase={fetchPhase}
-          timeEstimate={timeEstimate}
-          accountCount={activeHandles.length}
         />
       )}
 

@@ -19,12 +19,12 @@ const PROGRESS_WORDS = [
 
 const STAR_FRAMES = ['·', '*', '✶', '✺', '✶', '*', '·'];
 
-// Phase announcement messages — bold, shown at phase transitions
+// Phase announcement messages — shown at phase transitions, then verbs resume
 const PHASE_MESSAGES: Record<ChunkedFetchPhase, string> = {
-  profiles: 'Fetching profiles...',
-  followers: 'Fetching followers...',
-  engagement: 'Fetching likes and reposts...',
-  computing: 'Computing overlaps...',
+  profiles: 'Fetching profiles',
+  followers: 'Fetching followers',
+  engagement: 'Fetching likes and reposts',
+  computing: 'Computing overlaps',
 };
 
 function shuffleDeck(exclude?: string): string[] {
@@ -46,12 +46,6 @@ function formatNumber(n: number): string {
   return String(n);
 }
 
-function formatTimeEstimate(seconds: number): string {
-  if (seconds < 60) return `~${Math.ceil(seconds)}s remaining`;
-  const minutes = Math.ceil(seconds / 60);
-  return `~${minutes} min remaining`;
-}
-
 interface Props {
   pct: number;
   message?: string;
@@ -59,7 +53,7 @@ interface Props {
   postProgress?: Record<string, { analyzed: number; total: number }>;
   speedTier?: SpeedTier;
   fetchPhase?: ChunkedFetchPhase;
-  timeEstimate?: number | null; // seconds remaining
+  timeEstimate?: number | null;
   accountCount?: number;
 }
 
@@ -69,13 +63,10 @@ export default function ProgressPanel({
   postProgress,
   speedTier,
   fetchPhase,
-  timeEstimate,
-  accountCount,
 }: Props) {
   const [displayWord, setDisplayWord] = useState('Fetching');
   const [typedChars, setTypedChars] = useState(0);
   const [starIdx, setStarIdx] = useState(0);
-  const [isBold, setIsBold] = useState(false);
   const deckRef = useRef<string[]>([]);
   const lastWordRef = useRef<string>('');
   const lastPhaseRef = useRef<ChunkedFetchPhase | undefined>(undefined);
@@ -87,17 +78,16 @@ export default function ProgressPanel({
   const isChunked = speedTier === 'complete' && fetchPhase !== undefined;
   const isPermanentPhase = fetchPhase === 'computing';
 
-  // Phase transition: show bold announcement message
+  // Phase transition: show announcement, then verbs resume after hold
   useEffect(() => {
     if (!fetchPhase || fetchPhase === lastPhaseRef.current) return;
     lastPhaseRef.current = fetchPhase;
     const msg = PHASE_MESSAGES[fetchPhase];
     setDisplayWord(msg);
     setTypedChars(0);
-    setIsBold(true);
-    // Hold the phase message for 3s before resuming verb cycling
-    // (computing/finishing stay permanent)
-    phaseHoldUntilRef.current = isPermanentPhase ? Infinity : Date.now() + 3000;
+    // Hold the phase message for 4s before resuming verb cycling
+    // computing stays permanent
+    phaseHoldUntilRef.current = isPermanentPhase ? Infinity : Date.now() + 4000;
   }, [fetchPhase, isPermanentPhase]);
 
   // Verb wheel
@@ -114,7 +104,6 @@ export default function ProgressPanel({
       setDisplayWord(word);
       setTypedChars(0);
       setStarIdx(0);
-      setIsBold(false);
     };
 
     if (!isChunked) {
@@ -128,7 +117,7 @@ export default function ProgressPanel({
 
   // Typewriter effect
   useEffect(() => {
-    const targetLen = displayWord.endsWith('...') ? displayWord.length : displayWord.length + 3;
+    const targetLen = displayWord.length + 3; // always append "..."
     if (typedChars >= targetLen) return;
     const timeout = setTimeout(
       () => setTypedChars((c) => c + 1),
@@ -146,8 +135,7 @@ export default function ProgressPanel({
     return () => clearInterval(interval);
   }, []);
 
-  const textWithEllipsis = displayWord.endsWith('...') ? displayWord : displayWord + '...';
-  const visibleText = textWithEllipsis.slice(0, typedChars);
+  const visibleText = (displayWord + '...').slice(0, typedChars);
 
   // Aggregate progress — compute raw percentages then clamp monotonically
   const folEntries = Object.values(followerProgress ?? {});
@@ -186,7 +174,6 @@ export default function ProgressPanel({
             fontSize: 15,
             color: 'var(--color-navy)',
             minWidth: 200,
-            fontWeight: isBold ? 600 : 400,
           }}
         >
           {visibleText}
@@ -236,32 +223,6 @@ export default function ProgressPanel({
           <div className="progress-bar-fill" style={{ width: `${postPct}%` }} />
         </div>
       </div>
-
-      {/* Summary + time estimate (complete tier only) */}
-      {isChunked && (
-        <div
-          style={{
-            marginTop: 12,
-            fontSize: 11,
-            color: 'var(--color-text-faint)',
-            fontFamily: 'var(--font-mono)',
-          }}
-        >
-          {/* Summary line: "320K followers across 3 accounts — ~4 min remaining" */}
-          {folTotal > 0 && (
-            <div style={{ marginBottom: 4 }}>
-              {formatNumber(folTotal)} followers across {accountCount ?? folEntries.length} accounts
-              {timeEstimate != null && timeEstimate > 0 && (
-                <> — {formatTimeEstimate(timeEstimate)}</>
-              )}
-              {fetchPhase === 'computing' && ' — Almost done...'}
-            </div>
-          )}
-          <div style={{ opacity: 0.7 }}>
-            Large accounts may take several minutes
-          </div>
-        </div>
-      )}
     </div>
   );
 }

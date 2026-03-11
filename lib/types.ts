@@ -169,6 +169,20 @@ export interface OverlapDetail {
   account2: BskyProfile;
 }
 
+// ── Journalist directory ──────────────────────────────────────────────────────
+
+export interface JournalistEntry {
+  did: string;
+  handle: string;
+  displayName: string;
+  topics: string[];
+  geography?: string;
+  outlet?: string;
+  matchConfidence: number;
+  verified: boolean;
+  addedAt: string; // ISO 8601
+}
+
 // ── Saved reports ──────────────────────────────────────────────────────────────
 
 /** Stored in Redis for shareable report links. Omits overlapDetails (DID samples)

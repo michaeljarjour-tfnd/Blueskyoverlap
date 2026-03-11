@@ -285,6 +285,32 @@ export async function fetchPostEngagement(
   };
 }
 
+// ── Actor Search ──────────────────────────────────────────────────────────────
+
+export interface SearchActorResult {
+  did: string;
+  handle: string;
+  displayName?: string;
+  description?: string;
+  avatar?: string;
+  followersCount?: number;
+  followsCount?: number;
+  postsCount?: number;
+}
+
+/** Search Bluesky for actors matching a query string. */
+export async function searchActors(
+  query: string,
+  limit = 10,
+  signal?: AbortSignal
+): Promise<SearchActorResult[]> {
+  const url = `${BASE_URL}/app.bsky.actor.searchActors?q=${encodeURIComponent(query)}&limit=${limit}`;
+  const data = (await throttledFetch(url, signal)) as {
+    actors: SearchActorResult[];
+  };
+  return data.actors ?? [];
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Accepts @handle, bsky.app/profile/handle, or bare handle */

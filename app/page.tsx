@@ -112,13 +112,12 @@ function Header() {
         borderBottom: '1px solid var(--color-border)',
       }}
     >
-      {/* Trustfnd wordmark */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/trustfnd-logo.svg"
-        alt="Trustfnd"
-        style={{ height: 22, width: 'auto', marginBottom: 20, display: 'block' }}
-      />
+      {/* Logo + tagline */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/trustfnd-logo.svg" alt="Trustfnd" style={{ height: 22, width: 'auto' }} />
+        <span style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Meet Your Match</span>
+      </div>
       <h1
         style={{
           fontFamily: 'var(--font-sans)',
@@ -130,7 +129,7 @@ function Header() {
           margin: '0 0 10px',
         }}
       >
-        Meet your Match
+        Audience Overlap
       </h1>
       <p
         style={{
@@ -141,7 +140,7 @@ function Header() {
           margin: 0,
         }}
       >
-        Discover overlaps for potential collaborators based on your Bluesky followers.
+        Find shared audiences based on up to 10 Bluesky accounts.
       </p>
       <a
         href="/partners"

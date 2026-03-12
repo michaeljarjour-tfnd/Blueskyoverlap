@@ -363,16 +363,20 @@ function VerbWheel({ active }: { active: boolean }) {
 function Header() {
   return (
     <div style={{ marginBottom: 48, paddingBottom: 32, borderBottom: '1px solid var(--color-border)' }}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/trustfnd-logo.svg" alt="Trustfnd" style={{ height: 22, width: 'auto', marginBottom: 20, display: 'block' }} />
+      {/* Logo + tagline */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/trustfnd-logo.svg" alt="Trustfnd" style={{ height: 22, width: 'auto' }} />
+        <span style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Meet Your Match</span>
+      </div>
       <h1 style={{
         fontFamily: 'var(--font-sans)', fontSize: 42, fontWeight: 700,
         color: 'var(--color-navy)', lineHeight: 1.15, letterSpacing: '-0.02em', margin: '0 0 10px',
       }}>
-        Meet Your Match
+        Collaborator Matches
       </h1>
       <p style={{ color: 'var(--color-text-muted)', fontSize: 15, maxWidth: 540, lineHeight: 1.6, margin: 0 }}>
-        Get matching recommendations based on your Bluesky followers.
+        Find matching collaborators based on your Bluesky audiences.
       </p>
       <a
         href="/"

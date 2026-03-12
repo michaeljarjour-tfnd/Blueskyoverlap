@@ -623,7 +623,7 @@ function TrioCard({
           <div style={{
             fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const,
             letterSpacing: '0.08em', color: VENN_COLORS.a.stroke, marginBottom: 4,
-          }}>Partner A</div>
+          }}>Collaborator 1</div>
           <div style={{
             fontSize: 13, fontWeight: 600, color: 'var(--color-navy)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -639,7 +639,7 @@ function TrioCard({
           <div style={{
             fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const,
             letterSpacing: '0.08em', color: VENN_COLORS.b.stroke, marginBottom: 4,
-          }}>Partner B</div>
+          }}>Collaborator 2</div>
           <div style={{
             fontSize: 13, fontWeight: 600, color: 'var(--color-navy)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -877,7 +877,7 @@ function PairCard({
           </div>
         </div>
         <div>
-          <div style={{ fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: VENN_COLORS.a.stroke, marginBottom: 4 }}>Partner</div>
+          <div style={{ fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: VENN_COLORS.a.stroke, marginBottom: 4 }}>Collaborator</div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-navy)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {pair.match.displayName || `@${pair.match.handle}`}
           </div>

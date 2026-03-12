@@ -348,7 +348,7 @@ function VerbWheel({ active }: { active: boolean }) {
       </div>
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-text-faint)', marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
-          <span>Finding trios</span>
+          <span>Finding matches</span>
         </div>
         <div className="progress-bar-track">
           <div className="progress-bar-fill" style={{ width: `${Math.min(pct, 95)}%` }} />

@@ -229,6 +229,27 @@ interface TrioRecommendation {
   };
 }
 
+interface PairRecommendation {
+  match: {
+    did: string;
+    handle: string;
+    displayName: string;
+    avatar?: string;
+    geography?: string;
+    followerCount: number;
+  };
+  overlap: number;
+  sizes: { user: number; match: number };
+  totalReach: number;
+  pairScore: number;
+  overlapLevel: 'high' | 'medium' | 'low';
+  signals: {
+    sizeMatch: boolean;
+    topicMatch: boolean;
+    geoMatch: boolean;
+  };
+}
+
 // ── Redis helpers ───────────────────────────────────────────────────────────
 
 async function findBestFollowerSet(
@@ -262,12 +283,13 @@ export async function GET(req: NextRequest) {
   const topicsRaw = searchParams.get('topics') || searchParams.get('topic') || '';
   const userTopics = topicsRaw ? topicsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
   const userGeo = searchParams.get('geography') || undefined;
+  const mode = searchParams.get('mode') === 'pair' ? 'pair' : 'trio';
 
   if (!rawHandle) {
     return Response.json({ error: 'Missing required "handle" query parameter' }, { status: 400 });
   }
 
-  const trioCount = Math.min(Math.max(1, limitParam), 10);
+  const resultCount = Math.min(Math.max(1, limitParam), 10);
 
   const redis = getRedis();
   if (!redis) {
@@ -377,6 +399,57 @@ export async function GET(req: NextRequest) {
 
     scored.sort((a, b) => b.compositeScore - a.compositeScore);
 
+    // ── PAIR MODE: return individual matches ─────────────────────────────────
+    if (mode === 'pair') {
+      const topPairs = scored.slice(0, resultCount);
+      const pairDids = topPairs.map(s => s.entry.did);
+      const avatarMap: Map<string, string | undefined> = new Map();
+      if (pairDids.length > 0) {
+        try {
+          const profiles = await fetchProfilesForDids(pairDids);
+          for (const p of profiles) avatarMap.set(p.did, p.avatar);
+        } catch { /* Non-critical */ }
+      }
+
+      const pairs: PairRecommendation[] = topPairs.map(s => {
+        const totalReach = userSet.size + s.setSize - s.overlapWithUser;
+        return {
+          match: {
+            did: s.entry.did,
+            handle: s.entry.handle,
+            displayName: s.entry.displayName,
+            avatar: avatarMap.get(s.entry.did),
+            geography: s.entry.geography,
+            followerCount: s.setSize,
+          },
+          overlap: s.overlapWithUser,
+          sizes: { user: userSet.size, match: s.setSize },
+          totalReach,
+          pairScore: Math.round(s.compositeScore * 1000) / 1000,
+          overlapLevel: getOverlapLevel(s.jaccardWithUser),
+          signals: {
+            sizeMatch: s.sizeMatch,
+            topicMatch: s.topicMatch,
+            geoMatch: s.geoMatch,
+          },
+        };
+      });
+
+      return Response.json({
+        mode: 'pair',
+        user: {
+          did: profile.did,
+          handle: profile.handle,
+          followerCount: userFollowerCount,
+          avatar: profile.avatar,
+          sampleSize: userSet.size,
+        },
+        pairs,
+        totalJournalists: directoryPage.total,
+        comparedCount: comparableJournalists.length,
+      });
+    }
+
     // ── 7. Form trios from top candidates ────────────────────────────────────
     // Take top 20 individual matches, compute pairwise journalist-journalist overlaps
     const TOP_N = Math.min(20, scored.length);
@@ -442,7 +515,7 @@ export async function GET(req: NextRequest) {
       selectedTrios.push(trio);
       usedIndices.add(trio.iA);
       usedIndices.add(trio.iB);
-      if (selectedTrios.length >= trioCount) break;
+      if (selectedTrios.length >= resultCount) break;
     }
 
     // ── 8. Compute three-way intersections for selected trios ────────────────
@@ -536,6 +609,7 @@ export async function GET(req: NextRequest) {
         avatar: profile.avatar,
         sampleSize: userSet.size,
       },
+      mode: 'trio',
       trios,
       totalJournalists: directoryPage.total,
       comparedCount: comparableJournalists.length,

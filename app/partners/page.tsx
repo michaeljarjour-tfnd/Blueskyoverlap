@@ -38,15 +38,35 @@ interface TrioRecommendation {
   };
 }
 
-interface APIResponse {
-  user: {
-    did: string;
-    handle: string;
-    followerCount: number;
-    avatar?: string;
-    sampleSize?: number;
+interface PairRecommendation {
+  match: MatchInfo;
+  overlap: number;
+  sizes: { user: number; match: number };
+  totalReach: number;
+  pairScore: number;
+  overlapLevel: 'high' | 'medium' | 'low';
+  signals: {
+    sizeMatch: boolean;
+    topicMatch: boolean;
+    geoMatch: boolean;
   };
-  trios: TrioRecommendation[];
+}
+
+type MatchMode = 'trio' | 'pair';
+
+interface UserInfo {
+  did: string;
+  handle: string;
+  followerCount: number;
+  avatar?: string;
+  sampleSize?: number;
+}
+
+interface APIResponse {
+  mode: MatchMode;
+  user: UserInfo;
+  trios?: TrioRecommendation[];
+  pairs?: PairRecommendation[];
   totalJournalists: number;
   comparedCount: number;
 }
@@ -719,14 +739,196 @@ function NoCacheView({ user, onReset }: {
   );
 }
 
+// ── Pair Venn (two circles) ──────────────────────────────────────────────────
+
+function PairVennDiagram({
+  pair,
+  userHandle,
+  userAvatar,
+}: {
+  pair: PairRecommendation;
+  userHandle: string;
+  userAvatar?: string;
+}) {
+  const cx = { user: 120, match: 200 };
+  const cy = 100;
+  const r = 68;
+
+  const avatars = { user: userAvatar, match: pair.match.avatar };
+  const initials = {
+    user: userHandle.charAt(0).toUpperCase(),
+    match: (pair.match.displayName || pair.match.handle).charAt(0).toUpperCase(),
+  };
+  const colors = { user: VENN_COLORS.user, match: VENN_COLORS.a };
+
+  return (
+    <svg viewBox="0 0 320 200" style={{ width: '100%', maxWidth: 300, margin: '0 auto', display: 'block' }}>
+      {/* Circles */}
+      {(['user', 'match'] as const).map(key => (
+        <circle key={key} cx={cx[key]} cy={cy} r={r}
+          fill={colors[key].fill} fillOpacity={0.12}
+          stroke={colors[key].stroke} strokeWidth={2} strokeOpacity={0.6} />
+      ))}
+
+      {/* Avatars or initials */}
+      {(['user', 'match'] as const).map(key => {
+        const avatar = avatars[key];
+        const lx = key === 'user' ? cx.user - 28 : cx.match + 28;
+        return avatar ? (
+          <g key={`avatar-${key}`}>
+            <clipPath id={`pair-clip-${key}`}>
+              <circle cx={lx} cy={cy} r={16} />
+            </clipPath>
+            <image href={avatar} x={lx - 16} y={cy - 16} width={32} height={32}
+              clipPath={`url(#pair-clip-${key})`} style={{ imageRendering: 'auto' }} />
+            <circle cx={lx} cy={cy} r={16} fill="none" stroke={colors[key].stroke} strokeWidth={2} />
+          </g>
+        ) : (
+          <g key={`initial-${key}`}>
+            <circle cx={lx} cy={cy} r={16}
+              fill={colors[key].fill} fillOpacity={0.15} stroke={colors[key].stroke} strokeWidth={1.5} />
+            <text x={lx} y={cy + 1} textAnchor="middle" dominantBaseline="central"
+              fontSize={13} fontWeight={600} fill={colors[key].stroke} fontFamily="var(--font-sans)">
+              {initials[key]}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Overlap count in center */}
+      <g>
+        <circle cx={(cx.user + cx.match) / 2} cy={cy} r={20}
+          fill="#fff" fillOpacity={0.85} stroke="var(--color-navy)" strokeWidth={1} />
+        <text x={(cx.user + cx.match) / 2} y={cy} textAnchor="middle" dominantBaseline="central"
+          fontSize={11} fontWeight={700} fill="var(--color-navy)" fontFamily="var(--font-mono)">
+          {formatFollowers(pair.overlap)}
+        </text>
+      </g>
+
+      {/* Size labels */}
+      <text x={cx.user} y={cy - r - 10} textAnchor="middle"
+        fontSize={10} fill="var(--color-text-faint)" fontFamily="var(--font-mono)">
+        {formatFollowers(pair.sizes.user)}
+      </text>
+      <text x={cx.match} y={cy - r - 10} textAnchor="middle"
+        fontSize={10} fill="var(--color-text-faint)" fontFamily="var(--font-mono)">
+        {formatFollowers(pair.sizes.match)}
+      </text>
+    </svg>
+  );
+}
+
+// ── Pair card ────────────────────────────────────────────────────────────────
+
+function PairCard({
+  pair,
+  rank,
+  userHandle,
+  userAvatar,
+}: {
+  pair: PairRecommendation;
+  rank: number;
+  userHandle: string;
+  userAvatar?: string;
+}) {
+  const handles = [userHandle, pair.match.handle];
+  const analysisUrl = `/?handles=${handles.map(h => encodeURIComponent(h)).join(',')}&autostart=complete`;
+
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid var(--color-border)',
+      borderRadius: 8, padding: '24px', marginBottom: 20,
+      transition: 'border-color 0.15s',
+    }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-blue)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+    >
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600,
+            color: '#fff', background: 'var(--color-navy)',
+            width: 26, height: 26, borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {rank}
+          </span>
+          <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-navy)' }}>
+            Collaboration #{rank}
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 2 }}>
+          {pair.signals.sizeMatch && <SignalBadge label="Similar size" />}
+          {pair.signals.topicMatch && <SignalBadge label="Topic match" />}
+          {pair.signals.geoMatch && <SignalBadge label="Same region" />}
+        </div>
+      </div>
+
+      {/* Venn diagram */}
+      <PairVennDiagram pair={pair} userHandle={userHandle} userAvatar={userAvatar} />
+
+      {/* Members */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, margin: '16px 0', textAlign: 'center' }}>
+        <div>
+          <div style={{ fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: VENN_COLORS.user.stroke, marginBottom: 4 }}>You</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-navy)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            @{userHandle}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: VENN_COLORS.a.stroke, marginBottom: 4 }}>Partner</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-navy)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {pair.match.displayName || `@${pair.match.handle}`}
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-faint)' }}>
+            @{pair.match.handle}
+          </div>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr',
+        gap: 10, padding: '12px 14px', background: '#f8fafc',
+        borderRadius: 4, border: '1px solid #f1f5f9', marginBottom: 12,
+      }}>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-faint)', marginBottom: 3 }}>Combined reach</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600, color: 'var(--color-navy)' }}>
+            {formatFollowers(pair.totalReach)}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--color-text-faint)' }}>unique followers together</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-faint)', marginBottom: 3 }}>Shared followers</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600, color: 'var(--color-navy)' }}>
+            {formatFollowers(pair.overlap)}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--color-text-faint)' }}>followers in common</div>
+        </div>
+      </div>
+
+      <div style={{ textAlign: 'right' }}>
+        <a href={analysisUrl} style={{ fontSize: 13, color: 'var(--color-blue)', textDecoration: 'none', fontWeight: 500 }}>
+          Run full analysis →
+        </a>
+      </div>
+    </div>
+  );
+}
+
 // ── Results view ────────────────────────────────────────────────────────────
 
-function ResultsView({ user, trios, comparedCount, onReset }: {
-  user: APIResponse['user'];
-  trios: TrioRecommendation[];
-  comparedCount: number;
+function ResultsView({ result, onReset }: {
+  result: APIResponse;
   onReset: () => void;
 }) {
+  const { user, comparedCount } = result;
+  const hasTrios = result.mode === 'trio' && result.trios && result.trios.length > 0;
+  const hasPairs = result.mode === 'pair' && result.pairs && result.pairs.length > 0;
+  const hasResults = hasTrios || hasPairs;
+
   return (
     <div>
       {/* Summary strip */}
@@ -748,17 +950,28 @@ function ResultsView({ user, trios, comparedCount, onReset }: {
         <button onClick={onReset} className="btn-ghost" style={{ marginTop: 0 }}>New Search</button>
       </div>
 
-      {/* Trio cards */}
-      {trios.length > 0 ? (
-        trios.map((trio, i) => (
-          <TrioCard
-            key={`${trio.matchA.did}-${trio.matchB.did}`}
-            trio={trio}
-            rank={i + 1}
-            userHandle={user.handle}
-            userAvatar={user.avatar}
-          />
-        ))
+      {/* Results */}
+      {hasResults ? (
+        <>
+          {hasTrios && result.trios!.map((trio, i) => (
+            <TrioCard
+              key={`${trio.matchA.did}-${trio.matchB.did}`}
+              trio={trio}
+              rank={i + 1}
+              userHandle={user.handle}
+              userAvatar={user.avatar}
+            />
+          ))}
+          {hasPairs && result.pairs!.map((pair, i) => (
+            <PairCard
+              key={pair.match.did}
+              pair={pair}
+              rank={i + 1}
+              userHandle={user.handle}
+              userAvatar={user.avatar}
+            />
+          ))}
+        </>
       ) : (
         <div style={{ background: '#fff', border: '1px solid var(--color-border)', borderRadius: 6, padding: '40px 24px', textAlign: 'center' }}>
           <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-navy)', marginBottom: 8 }}>
@@ -896,6 +1109,7 @@ function ComboSelect({ label, options, value, onChange, placeholder }: {
 export default function PartnersPage() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [handle, setHandle] = useState('');
+  const [matchMode, setMatchMode] = useState<MatchMode>('trio');
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [selectedGeo, setSelectedGeo] = useState('');
   const [topics, setTopics] = useState<string[]>([]);
@@ -904,7 +1118,6 @@ export default function PartnersPage() {
   const [noCacheUser, setNoCacheUser] = useState<NoCacheResponse['user'] | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  // loadingMessage removed — now using VerbWheel component
 
   useEffect(() => {
     fetch('/api/directory?stats=true')
@@ -945,7 +1158,7 @@ export default function PartnersPage() {
     setErrorMsg(null);
 
     try {
-      const params = new URLSearchParams({ handle: clean, limit: '3' });
+      const params = new URLSearchParams({ handle: clean, limit: '3', mode: matchMode });
       if (selectedTopics.length > 0) params.set('topics', selectedTopics.join(','));
       if (selectedGeo) params.set('geography', selectedGeo);
 
@@ -969,7 +1182,7 @@ export default function PartnersPage() {
       setErrorMsg((err as Error).message ?? 'Something went wrong');
       setPhase('error');
     }
-  }, [handle, selectedTopics, selectedGeo]);
+  }, [handle, matchMode, selectedTopics, selectedGeo]);
 
   const handleReset = () => {
     abortRef.current?.abort();
@@ -1014,6 +1227,24 @@ export default function PartnersPage() {
             </>
           )}
 
+          <hr className="divider" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 0 }}>
+            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Match type:</span>
+            <div style={{ display: 'flex', borderRadius: 6, border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+              {(['trio', 'pair'] as const).map(m => (
+                <button key={m} type="button" onClick={() => setMatchMode(m)}
+                  style={{
+                    padding: '6px 14px', fontSize: 13, fontWeight: 500, border: 'none', cursor: 'pointer',
+                    background: matchMode === m ? 'var(--color-navy)' : '#fff',
+                    color: matchMode === m ? '#fff' : 'var(--color-text-muted)',
+                    transition: 'all 0.15s ease',
+                  }}>
+                  {m === 'trio' ? '3-way collab' : '1-on-1 collab'}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <button type="submit" className="btn" disabled={!handle.trim()} style={{ marginTop: 20 }}>
             Find Collaborations
           </button>
@@ -1033,9 +1264,7 @@ export default function PartnersPage() {
 
       {phase === 'results' && apiResult && (
         <ResultsView
-          user={apiResult.user}
-          trios={apiResult.trios}
-          comparedCount={apiResult.comparedCount}
+          result={apiResult}
           onReset={handleReset}
         />
       )}

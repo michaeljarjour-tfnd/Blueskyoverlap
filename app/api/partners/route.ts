@@ -650,7 +650,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (err) {
     const message = (err as Error).message ?? 'An unexpected error occurred';
-    if (message.includes('not found') || message.includes('Could not find')) {
+    if (message.includes('not found') || message.includes('Could not find') || message.includes('HTTP 400')) {
       return Response.json({ error: `Could not find Bluesky account: ${rawHandle}` }, { status: 404 });
     }
     return Response.json({ error: message }, { status: 500 });

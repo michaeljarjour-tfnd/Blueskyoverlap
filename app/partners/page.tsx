@@ -224,24 +224,113 @@ function normalizeUserGeo(input: string): string {
   return input;
 }
 
-// ── Loading messages ────────────────────────────────────────────────────────
+// ── Loading animation (verb wheel — matches analysis page) ─────────────────
 
-const LOADING_MESSAGES = [
-  'Cross-referencing audiences...',
-  'Checking the rolodex...',
-  'Finding your best collaborations...',
-  'Scanning the directory...',
-  'Crunching the numbers...',
+const PROGRESS_WORDS = [
+  'Fetching', 'Indexing', 'Comparing', 'Scanning', 'Loading',
+  'Processing', 'Computing', 'Connecting', 'Counting', 'Querying',
+  'Crosschecking', 'Triangulating', 'Crunching', 'Mapping',
+  'Perusing', 'Tallying', 'Calculating', 'Investigating',
+  'Surveying', 'Decoding', 'Assembling', 'Checking', 'Finding',
+  'Grinding', 'Sleuthing', 'Researching', 'Unraveling', 'Deliberating',
+  'Hacking', 'Figuring', 'Spelunking', 'Networking', 'Ruminating',
+  'Calibrating', 'Extrapolating', 'Correlating', 'Tabulating', 'Synthesizing',
+  'Reconciling', 'Interpolating', 'Aggregating', 'Enumerating', 'Deduplicating',
+  'Normalizing', 'Quantifying', 'Classifying', 'Disambiguating', 'Partitioning',
+  'Scrutinizing', 'Unspooling', 'Verifying', 'Advancing',
 ];
 
-function useRotatingMessage(active: boolean, interval = 2500): string {
-  const [index, setIndex] = useState(0);
+const STAR_FRAMES = ['·', '*', '✶', '✺', '✶', '*', '·'];
+
+function shuffleDeck(exclude?: string): string[] {
+  const deck = [...PROGRESS_WORDS];
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  if (exclude && deck[0] === exclude) {
+    const swap = Math.floor(Math.random() * (deck.length - 1)) + 1;
+    [deck[0], deck[swap]] = [deck[swap], deck[0]];
+  }
+  return deck;
+}
+
+function VerbWheel({ active }: { active: boolean }) {
+  const [displayWord, setDisplayWord] = useState('Scanning');
+  const [typedChars, setTypedChars] = useState(0);
+  const [starIdx, setStarIdx] = useState(0);
+  const [pct, setPct] = useState(0);
+  const deckRef = useRef<string[]>([]);
+  const lastWordRef = useRef<string>('');
+
+  // Verb cycling
   useEffect(() => {
     if (!active) return;
-    const id = setInterval(() => setIndex((prev) => (prev + 1) % LOADING_MESSAGES.length), interval);
+    const nextWord = () => {
+      if (!deckRef.current.length) {
+        deckRef.current = shuffleDeck(lastWordRef.current);
+      }
+      const word = deckRef.current.shift()!;
+      lastWordRef.current = word;
+      setDisplayWord(word);
+      setTypedChars(0);
+      setStarIdx(0);
+    };
+    nextWord();
+    const id = setInterval(nextWord, 1800);
     return () => clearInterval(id);
-  }, [active, interval]);
-  return LOADING_MESSAGES[index];
+  }, [active]);
+
+  // Typewriter
+  useEffect(() => {
+    const targetLen = displayWord.length + 3;
+    if (typedChars >= targetLen) return;
+    const timeout = setTimeout(() => setTypedChars(c => c + 1), 40);
+    return () => clearTimeout(timeout);
+  }, [typedChars, displayWord]);
+
+  // Star spinner
+  useEffect(() => {
+    const id = setInterval(() => setStarIdx(i => (i + 1) % STAR_FRAMES.length), 500);
+    return () => clearInterval(id);
+  }, []);
+
+  // Fake progress bar — moves quickly at first, slows down
+  useEffect(() => {
+    if (!active) { setPct(0); return; }
+    const id = setInterval(() => {
+      setPct(prev => {
+        if (prev >= 90) return prev + 0.1;
+        if (prev >= 70) return prev + 0.3;
+        if (prev >= 40) return prev + 0.8;
+        return prev + 2;
+      });
+    }, 200);
+    return () => clearInterval(id);
+  }, [active]);
+
+  const visibleText = (displayWord + '...').slice(0, typedChars);
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--color-blue)', letterSpacing: '-0.01em' }}>
+          {STAR_FRAMES[starIdx]}
+        </span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, color: 'var(--color-navy)', minWidth: 200 }}>
+          {visibleText}
+        </span>
+      </div>
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-text-faint)', marginBottom: 4, fontFamily: 'var(--font-mono)' }}>
+          <span>Finding trios</span>
+        </div>
+        <div className="progress-bar-track">
+          <div className="progress-bar-fill" style={{ width: `${Math.min(pct, 95)}%` }} />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Header ──────────────────────────────────────────────────────────────────
@@ -815,7 +904,7 @@ export default function PartnersPage() {
   const [noCacheUser, setNoCacheUser] = useState<NoCacheResponse['user'] | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const loadingMessage = useRotatingMessage(phase === 'loading');
+  // loadingMessage removed — now using VerbWheel component
 
   useEffect(() => {
     fetch('/api/directory?stats=true')
@@ -931,21 +1020,7 @@ export default function PartnersPage() {
         </form>
       )}
 
-      {phase === 'loading' && (
-        <div style={{ background: '#fff', border: '1px solid var(--color-border)', borderRadius: 6, padding: '48px 32px', textAlign: 'center' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 20 }}>
-            {[0, 1, 2].map(i => (
-              <div key={i} style={{
-                width: 8, height: 8, borderRadius: '50%', background: 'var(--color-blue)',
-                animation: `pulse-dot 1.2s ease-in-out ${i * 0.2}s infinite`,
-              }} />
-            ))}
-          </div>
-          <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-navy)', marginBottom: 6 }}>{loadingMessage}</div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-faint)', margin: 0 }}>This usually takes a few seconds</p>
-          <style>{`@keyframes pulse-dot { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }`}</style>
-        </div>
-      )}
+      {phase === 'loading' && <VerbWheel active />}
 
       {phase === 'no-cache' && <NoCacheView user={noCacheUser} onReset={handleReset} />}
 

@@ -1114,6 +1114,253 @@ function ProportionalBar() {
   );
 }
 
+// ── Visualization: Rectangle Overlap ──────────────────────────────────────────
+// Three translucent colored rectangles that overlap like the reference image.
+// Where they overlap, colors blend naturally. Hover highlights a creator's rect.
+
+function RectangleOverlap() {
+  const total = TRIO_DATA.totalReach;
+  const [hovered, setHovered] = useState<string | null>('center');
+
+  const uniqueUser = TRIO_DATA.user.size - TRIO_DATA.overlaps.userA - TRIO_DATA.overlaps.userB - TRIO_DATA.overlaps.threeWay;
+  const uniqueA = TRIO_DATA.matchA.size - TRIO_DATA.overlaps.userA - TRIO_DATA.overlaps.ab - TRIO_DATA.overlaps.threeWay;
+  const uniqueB = TRIO_DATA.matchB.size - TRIO_DATA.overlaps.userB - TRIO_DATA.overlaps.ab - TRIO_DATA.overlaps.threeWay;
+
+  // Three rectangles positioned to overlap. Each creator gets a color.
+  // Layout: Jon (pink) bottom-left, Jim (blue) top-center, talia (cyan) right
+  const rects = [
+    {
+      id: 'user', name: 'Jon', size: TRIO_DATA.user.size,
+      color: '#ec4899', bg: 'rgba(236, 72, 153, 0.35)',
+      x: 20, y: 120, w: 220, h: 200,
+    },
+    {
+      id: 'a', name: 'Jim', size: TRIO_DATA.matchA.size,
+      color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.35)',
+      x: 100, y: 40, w: 220, h: 200,
+    },
+    {
+      id: 'b', name: 'talia', size: TRIO_DATA.matchB.size,
+      color: '#22d3ee', bg: 'rgba(34, 211, 238, 0.35)',
+      x: 180, y: 120, w: 220, h: 200,
+    },
+  ];
+
+  // Compute overlap zones (rectangles intersections) for labeling
+  const intersect = (r1: typeof rects[0], r2: typeof rects[0]) => {
+    const x = Math.max(r1.x, r2.x);
+    const y = Math.max(r1.y, r2.y);
+    const x2 = Math.min(r1.x + r1.w, r2.x + r2.w);
+    const y2 = Math.min(r1.y + r1.h, r2.y + r2.h);
+    if (x2 > x && y2 > y) return { x, y, w: x2 - x, h: y2 - y, cx: (x + x2) / 2, cy: (y + y2) / 2 };
+    return null;
+  };
+
+  const userRect = rects[0], aRect = rects[1], bRect = rects[2];
+  const userAZone = intersect(userRect, aRect);
+  const userBZone = intersect(userRect, bRect);
+  const abZone = intersect(aRect, bRect);
+
+  // Three-way intersection
+  const threeWayZone = (() => {
+    if (!userAZone) return null;
+    const fakeRect = { ...bRect, id: 'b', name: 'b', size: 0, color: '', bg: '' };
+    const x = Math.max(userAZone.x, fakeRect.x);
+    const y = Math.max(userAZone.y, fakeRect.y);
+    const x2 = Math.min(userAZone.x + userAZone.w, fakeRect.x + fakeRect.w);
+    const y2 = Math.min(userAZone.y + userAZone.h, fakeRect.y + fakeRect.h);
+    if (x2 > x && y2 > y) return { x, y, w: x2 - x, h: y2 - y, cx: (x + x2) / 2, cy: (y + y2) / 2 };
+    return null;
+  })();
+
+  // Zone data for labels
+  const zones = [
+    { id: 'userA', label: `${fmt(TRIO_DATA.overlaps.userA)}`, zone: userAZone, owners: ['user', 'a'] },
+    { id: 'userB', label: `${fmt(TRIO_DATA.overlaps.userB)}`, zone: userBZone, owners: ['user', 'b'] },
+    { id: 'ab', label: `${fmt(TRIO_DATA.overlaps.ab)}`, zone: abZone, owners: ['a', 'b'] },
+    { id: 'center', label: `${fmt(TRIO_DATA.overlaps.threeWay)}`, zone: threeWayZone, owners: ['user', 'a', 'b'] },
+  ];
+
+  const isRectActive = (rectId: string) => {
+    if (hovered === null) return true;
+    if (hovered === 'center') return true; // show all with center highlighted
+    return rectId === hovered;
+  };
+
+  const getSubline = () => {
+    if (hovered === null) return { text: 'Tap a name to explore', color: '#94a3b8' };
+    if (hovered === 'center') return { text: `${fmt(TRIO_DATA.overlaps.threeWay)} follow all three`, color: '#6d28d9' };
+    const rect = rects.find(r => r.id === hovered)!;
+    const sharedCount = rect.id === 'user'
+      ? TRIO_DATA.overlaps.userA + TRIO_DATA.overlaps.userB + TRIO_DATA.overlaps.threeWay
+      : rect.id === 'a'
+        ? TRIO_DATA.overlaps.userA + TRIO_DATA.overlaps.ab + TRIO_DATA.overlaps.threeWay
+        : TRIO_DATA.overlaps.userB + TRIO_DATA.overlaps.ab + TRIO_DATA.overlaps.threeWay;
+    return { text: `${fmt(rect.size)} follow ${rect.name} · ${fmt(sharedCount)} shared`, color: rect.color };
+  };
+
+  const subline = getSubline();
+
+  return (
+    <div>
+      {/* Headline */}
+      <div style={{ textAlign: 'center', marginBottom: 4 }}>
+        <div style={{
+          fontSize: 28, fontWeight: 700, fontFamily: 'var(--font-mono)',
+          color: 'var(--color-navy)', letterSpacing: '-0.02em',
+        }}>
+          Combined reach of {fmt(total)} unique followers
+        </div>
+      </div>
+
+      {/* Dynamic subline */}
+      <div style={{
+        textAlign: 'center', marginBottom: 16, minHeight: 22,
+        fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 500,
+        color: subline.color, transition: 'color 0.3s ease',
+      }}>
+        {subline.text}
+      </div>
+
+      {/* Rectangle overlap SVG */}
+      <svg
+        viewBox="0 0 420 360"
+        style={{ width: '100%', maxWidth: 480, display: 'block', margin: '0 auto', cursor: 'pointer' }}
+        onMouseLeave={() => setHovered('center')}
+      >
+        {/* Mix-blend-mode container */}
+        <g style={{ isolation: 'isolate' } as React.CSSProperties}>
+          {rects.map((rect) => {
+            const active = isRectActive(rect.id);
+            const isDirectHover = hovered === rect.id;
+            return (
+              <rect
+                key={rect.id}
+                x={rect.x} y={rect.y} width={rect.w} height={rect.h}
+                rx={16}
+                fill={rect.bg}
+                opacity={hovered === null || active ? 1 : 0.15}
+                style={{
+                  transition: 'opacity 0.4s ease',
+                  mixBlendMode: 'multiply',
+                  stroke: isDirectHover ? rect.color : 'transparent',
+                  strokeWidth: isDirectHover ? 2.5 : 0,
+                } as React.CSSProperties}
+                onMouseEnter={() => setHovered(rect.id)}
+                onClick={() => setHovered(hovered === rect.id ? 'center' : rect.id)}
+              />
+            );
+          })}
+        </g>
+
+        {/* Creator name + count labels in unique areas */}
+        {rects.map((rect) => {
+          // Find the centroid of the unique-only area (approximate: center of rect, nudged away from overlaps)
+          const nudge = rect.id === 'user' ? { dx: -40, dy: 40 }
+            : rect.id === 'a' ? { dx: 0, dy: -40 }
+            : { dx: 40, dy: 40 };
+          const lx = rect.x + rect.w / 2 + nudge.dx;
+          const ly = rect.y + rect.h / 2 + nudge.dy;
+          const isActive = hovered === null || hovered === rect.id || hovered === 'center';
+          return (
+            <g key={`label-${rect.id}`} style={{ pointerEvents: 'none' }}>
+              <text x={lx} y={ly - 8} textAnchor="middle" fontSize={13} fontWeight={700}
+                fill={rect.color} fontFamily="var(--font-mono)"
+                opacity={isActive ? 1 : 0.3}
+                style={{ transition: 'opacity 0.3s ease' }}
+              >
+                {rect.name}
+              </text>
+              <text x={lx} y={ly + 8} textAnchor="middle" fontSize={11} fontWeight={500}
+                fill={rect.color} fontFamily="var(--font-mono)"
+                opacity={isActive ? 0.7 : 0.2}
+                style={{ transition: 'opacity 0.3s ease' }}
+              >
+                {fmt(rect.size)}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Overlap zone labels */}
+        {zones.map((z) => {
+          if (!z.zone) return null;
+          const isActive = hovered === null
+            || hovered === 'center'
+            || z.owners.includes(hovered);
+          // For center (three-way), show differently
+          const isCenter = z.id === 'center';
+          return (
+            <g key={`zone-${z.id}`}
+              style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+              onMouseEnter={() => {
+                if (isCenter) setHovered('center');
+                else setHovered(z.owners[0]);
+              }}
+              onClick={() => {
+                if (isCenter) setHovered('center');
+              }}
+            >
+              {/* Invisible hit area */}
+              <rect x={z.zone.x} y={z.zone.y} width={z.zone.w} height={z.zone.h}
+                fill="transparent" />
+              <text
+                x={z.zone.cx} y={z.zone.cy + 4}
+                textAnchor="middle" fontSize={isCenter ? 13 : 10}
+                fontWeight={isCenter ? 800 : 600}
+                fill={isCenter ? '#6d28d9' : '#475569'}
+                fontFamily="var(--font-mono)"
+                opacity={isActive ? 1 : 0.2}
+                style={{ transition: 'opacity 0.3s ease', pointerEvents: 'none' }}
+              >
+                {z.label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Account buttons */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+        {rects.map((rect) => {
+          const isHov = hovered === rect.id;
+          return (
+            <button
+              key={rect.id}
+              onMouseEnter={() => setHovered(rect.id)}
+              onMouseLeave={() => setHovered('center')}
+              onClick={() => setHovered(hovered === rect.id ? 'center' : rect.id)}
+              style={{
+                padding: '6px 16px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                backgroundColor: isHov ? rect.color : '#f1f5f9',
+                color: isHov ? '#fff' : '#64748b',
+                fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)',
+                transition: 'all 0.3s ease',
+              }}
+            >
+              {rect.name} · {fmt(rect.size)}
+            </button>
+          );
+        })}
+        <button
+          onMouseEnter={() => setHovered('center')}
+          onMouseLeave={() => setHovered('center')}
+          onClick={() => setHovered('center')}
+          style={{
+            padding: '6px 12px', borderRadius: 20, border: 'none', cursor: 'pointer',
+            backgroundColor: hovered === 'center' ? '#6d28d9' : '#f1f5f9',
+            color: hovered === 'center' ? '#fff' : '#64748b',
+            fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)',
+            transition: 'all 0.3s ease',
+          }}
+        >
+          All 3
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 export default function VisualizationsPage() {
@@ -1134,7 +1381,8 @@ export default function VisualizationsPage() {
 
       {/* Card wrapper */}
       {[
-        { title: '⭐ Galaxy', desc: 'Every dot is a follower. They fill a circle like a crowd. All calm blue by default — hover a name to see their portion light up within the mass.', component: <Galaxy /> },
+        { title: '⭐ Rectangles', desc: 'Three translucent rectangles with color blending. Overlap zones show natural color mixes — instantly readable without a legend.', component: <RectangleOverlap /> },
+        { title: '⭐ Galaxy', desc: 'Every dot is a follower. Color-blended: pink/blue/cyan with natural overlap blends. Hover to explore.', component: <Galaxy /> },
         { title: '1a. Particle Dots (Organic)', desc: 'Each dot = a cluster of followers. Shared followers drift to the center. Animated on load.', component: <ParticleDots /> },
         { title: '1b. Particle Dots (Structured)', desc: 'Same concept but with clear zones, Fibonacci dot packing, hover to highlight each segment. More readable.', component: <ParticleDotsStructured /> },
         { title: '2. Sankey Flow', desc: 'Accounts on the left, audience segments on the right. Hover flows to see where each account\'s followers end up.', component: <SankeyFlow /> },

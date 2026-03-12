@@ -348,7 +348,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const comparableJournalists = journalists.filter(j => journalistSetInfo.has(j.did));
+    const comparableJournalists = journalists.filter(j => journalistSetInfo.has(j.did) && j.did !== profile.did);
     if (comparableJournalists.length === 0) {
       return Response.json({
         user: { did: profile.did, handle: profile.handle, followerCount: userFollowerCount, avatar: profile.avatar },

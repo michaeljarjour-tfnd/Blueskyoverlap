@@ -18,6 +18,7 @@ const directory = accepted.map(entry => ({
   topics: entry.topics || [],
   geography: entry.geography || undefined,
   outlet: entry.outlet || undefined,
+  followerCount: entry.followersCount || entry.followerCount || 0,
   matchConfidence: entry.matchConfidence,
   verified: entry.verified || false,
   addedAt: new Date().toISOString(),

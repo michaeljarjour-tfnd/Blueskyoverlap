@@ -178,6 +178,7 @@ export interface JournalistEntry {
   topics: string[];
   geography?: string;
   outlet?: string;
+  followerCount?: number;
   matchConfidence: number;
   verified: boolean;
   addedAt: string; // ISO 8601

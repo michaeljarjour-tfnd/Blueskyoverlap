@@ -4,7 +4,11 @@ import { getRedis } from '@/lib/redis/client';
 import { getDirectoryEntries } from '@/lib/redis/directory';
 import type { SpeedTier, JournalistEntry } from '@/lib/types';
 
-export const maxDuration = 30;
+export const maxDuration = 60;
+
+// Lua script: count intersection size server-side (avoids transferring full sets)
+const SINTERCOUNT_SCRIPT = `return #redis.call('sinter', KEYS[1], KEYS[2])`;
+const SINTERCOUNT3_SCRIPT = `return #redis.call('sinter', KEYS[1], KEYS[2], KEYS[3])`;
 
 const TIER_PRIORITY: SpeedTier[] = ['complete', 'balanced', 'quick'];
 
@@ -369,12 +373,12 @@ export async function GET(req: NextRequest) {
       const pipe = redis.pipeline();
       for (const j of chunk) {
         const jInfo = journalistSetInfo.get(j.did)!;
-        pipe.sinter(userSet.key, jInfo.key);
+        // Use Lua eval to count intersection server-side (avoids transferring full sets)
+        pipe.eval(SINTERCOUNT_SCRIPT, [userSet.key, jInfo.key], []);
       }
       const results = await pipe.exec();
       for (let i = 0; i < chunk.length; i++) {
-        const result = results[i];
-        overlapCounts.set(chunk[i].did, Array.isArray(result) ? result.length : 0);
+        overlapCounts.set(chunk[i].did, Number(results[i]) || 0);
       }
     }
 
@@ -477,14 +481,12 @@ export async function GET(req: NextRequest) {
       const chunk = pairs.slice(batch, batch + PIPELINE_BATCH);
       const pipe = redis.pipeline();
       for (const { iA, iB } of chunk) {
-        pipe.sinter(candidates[iA].setKey, candidates[iB].setKey);
+        pipe.eval(SINTERCOUNT_SCRIPT, [candidates[iA].setKey, candidates[iB].setKey], []);
       }
       const results = await pipe.exec();
       for (let i = 0; i < chunk.length; i++) {
         const { iA, iB } = chunk[i];
-        const key = `${iA}:${iB}`;
-        const result = results[i];
-        pairOverlaps.set(key, Array.isArray(result) ? result.length : 0);
+        pairOverlaps.set(`${iA}:${iB}`, Number(results[i]) || 0);
       }
     }
 
@@ -530,13 +532,12 @@ export async function GET(req: NextRequest) {
     if (selectedTrios.length > 0) {
       const pipe = redis.pipeline();
       for (const trio of selectedTrios) {
-        pipe.sinter(userSet.key, candidates[trio.iA].setKey, candidates[trio.iB].setKey);
+        pipe.eval(SINTERCOUNT3_SCRIPT, [userSet.key, candidates[trio.iA].setKey, candidates[trio.iB].setKey], []);
       }
       const results = await pipe.exec();
       for (let i = 0; i < selectedTrios.length; i++) {
-        const result = results[i];
         (selectedTrios[i] as CandidateTrio & { threeWayOverlap?: number }).threeWayOverlap =
-          Array.isArray(result) ? result.length : 0;
+          Number(results[i]) || 0;
       }
     }
 

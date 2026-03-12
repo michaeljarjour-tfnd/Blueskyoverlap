@@ -1173,7 +1173,7 @@ export default function PartnersPage() {
         }
         const msg = (body as { error?: string }).error || '';
         if (res.status === 504 || res.status === 502 || !msg) {
-          throw new Error('The request timed out — try again or switch to 1-on-1 mode (faster).');
+          throw new Error('The request timed out — try again or switch to Pair mode (faster).');
         }
         throw new Error(msg.toLowerCase().includes('not found') ? `Could not find Bluesky account: ${clean}` : msg);
       }

@@ -1212,7 +1212,7 @@ export default function PartnersPage() {
                     color: matchMode === m ? '#fff' : 'var(--color-text-muted)',
                     transition: 'all 0.15s ease',
                   }}>
-                  {m === 'trio' ? '3-way collab' : '1-on-1 collab'}
+                  {m === 'trio' ? 'Trio' : 'Pair'}
                 </button>
               ))}
             </div>

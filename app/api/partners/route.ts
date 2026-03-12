@@ -353,11 +353,19 @@ export async function GET(req: NextRequest) {
     }
 
     // ── 5. Compute user-journalist overlaps ──────────────────────────────────
-    const PIPELINE_BATCH = 50;
+    // Cap comparisons to avoid timeouts — top 100 by set size similarity
+    const MAX_COMPARE = 100;
+    const rankedByRelevance = [...comparableJournalists].sort((a, b) => {
+      const aSize = journalistSetInfo.get(a.did)!.size;
+      const bSize = journalistSetInfo.get(b.did)!.size;
+      return sizeSimilarity(userFollowerCount, bSize) - sizeSimilarity(userFollowerCount, aSize);
+    }).slice(0, MAX_COMPARE);
+
+    const PIPELINE_BATCH = 25;
     const overlapCounts: Map<string, number> = new Map();
 
-    for (let batch = 0; batch < comparableJournalists.length; batch += PIPELINE_BATCH) {
-      const chunk = comparableJournalists.slice(batch, batch + PIPELINE_BATCH);
+    for (let batch = 0; batch < rankedByRelevance.length; batch += PIPELINE_BATCH) {
+      const chunk = rankedByRelevance.slice(batch, batch + PIPELINE_BATCH);
       const pipe = redis.pipeline();
       for (const j of chunk) {
         const jInfo = journalistSetInfo.get(j.did)!;
@@ -373,7 +381,7 @@ export async function GET(req: NextRequest) {
     // ── 6. Score individuals ─────────────────────────────────────────────────
     const W_JACCARD = 0.40, W_SIZE = 0.30, W_TOPIC = 0.20, W_GEO = 0.10;
 
-    const scored: ScoredJournalist[] = comparableJournalists.map(j => {
+    const scored: ScoredJournalist[] = rankedByRelevance.map(j => {
       const overlapCount = overlapCounts.get(j.did) ?? 0;
       const jSetSize = journalistSetInfo.get(j.did)!.size;
       const union = userSet.size + jSetSize - overlapCount;
@@ -452,7 +460,7 @@ export async function GET(req: NextRequest) {
 
     // ── 7. Form trios from top candidates ────────────────────────────────────
     // Take top 20 individual matches, compute pairwise journalist-journalist overlaps
-    const TOP_N = Math.min(20, scored.length);
+    const TOP_N = Math.min(10, scored.length);
     const candidates = scored.slice(0, TOP_N);
 
     // Compute all pairwise journalist-journalist overlaps

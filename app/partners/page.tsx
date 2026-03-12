@@ -364,10 +364,10 @@ function Header() {
         fontFamily: 'var(--font-sans)', fontSize: 42, fontWeight: 700,
         color: 'var(--color-navy)', lineHeight: 1.15, letterSpacing: '-0.02em', margin: '0 0 10px',
       }}>
-        Find Your Trio
+        Meet Your Match
       </h1>
       <p style={{ color: 'var(--color-text-muted)', fontSize: 15, maxWidth: 540, lineHeight: 1.6, margin: 0 }}>
-        Discover three-way collaboration opportunities — journalists who share your audience and each other&apos;s.
+        Discover collaboration opportunities with journalists who share your audience.
       </p>
     </div>
   );
@@ -1171,7 +1171,10 @@ export default function PartnersPage() {
           setPhase('no-cache');
           return;
         }
-        const msg = (body as { error?: string }).error ?? res.statusText;
+        const msg = (body as { error?: string }).error || '';
+        if (res.status === 504 || res.status === 502 || !msg) {
+          throw new Error('The request timed out — try again or switch to 1-on-1 mode (faster).');
+        }
         throw new Error(msg.toLowerCase().includes('not found') ? `Could not find Bluesky account: ${clean}` : msg);
       }
 
@@ -1179,7 +1182,7 @@ export default function PartnersPage() {
       setPhase('results');
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
-      setErrorMsg((err as Error).message ?? 'Something went wrong');
+      setErrorMsg((err as Error).message || 'Something went wrong — please try again.');
       setPhase('error');
     }
   }, [handle, matchMode, selectedTopics, selectedGeo]);
@@ -1198,7 +1201,23 @@ export default function PartnersPage() {
 
       {phase === 'idle' && (
         <form onSubmit={handleSubmit} className="card">
-          <h2>Who are you?</h2>
+          {/* Match type toggle — prominent at top */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+            <div style={{ display: 'flex', borderRadius: 6, border: '1px solid var(--color-border)', overflow: 'hidden', flex: 1 }}>
+              {(['pair', 'trio'] as const).map(m => (
+                <button key={m} type="button" onClick={() => setMatchMode(m)}
+                  style={{
+                    flex: 1, padding: '10px 14px', fontSize: 14, fontWeight: 600, border: 'none', cursor: 'pointer',
+                    background: matchMode === m ? 'var(--color-navy)' : '#fff',
+                    color: matchMode === m ? '#fff' : 'var(--color-text-muted)',
+                    transition: 'all 0.15s ease',
+                  }}>
+                  {m === 'trio' ? '3-way collab' : '1-on-1 collab'}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="input-group">
             <label>Your Bluesky handle</label>
             <input className="handle-input" type="text" placeholder="e.g. yourname.bsky.social"
@@ -1226,24 +1245,6 @@ export default function PartnersPage() {
               </div>
             </>
           )}
-
-          <hr className="divider" />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 0 }}>
-            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Match type:</span>
-            <div style={{ display: 'flex', borderRadius: 6, border: '1px solid var(--color-border)', overflow: 'hidden' }}>
-              {(['trio', 'pair'] as const).map(m => (
-                <button key={m} type="button" onClick={() => setMatchMode(m)}
-                  style={{
-                    padding: '6px 14px', fontSize: 13, fontWeight: 500, border: 'none', cursor: 'pointer',
-                    background: matchMode === m ? 'var(--color-navy)' : '#fff',
-                    color: matchMode === m ? '#fff' : 'var(--color-text-muted)',
-                    transition: 'all 0.15s ease',
-                  }}>
-                  {m === 'trio' ? '3-way collab' : '1-on-1 collab'}
-                </button>
-              ))}
-            </div>
-          </div>
 
           <button type="submit" className="btn" disabled={!handle.trim()} style={{ marginTop: 20 }}>
             Find Collaborations

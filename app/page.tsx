@@ -507,7 +507,7 @@ function HomeInner() {
     setTimeEstimate(null);
   };
 
-  // ── Autostart from URL params (?handles=a,b&autostart=quick) ────────────
+  // ── Autostart from URL params (?handles=a,b&autostart=complete) ──────────
   const searchParams = useSearchParams();
   const autostartedRef = useRef(false);
 
@@ -519,8 +519,7 @@ function HomeInner() {
       autostartedRef.current = true;
       const handles = handlesParam.split(',').map(h => h.trim()).filter(Boolean);
       if (handles.length > 0) {
-        const tier: SpeedTier = ['quick', 'balanced', 'complete'].includes(autostart) ? autostart : 'quick';
-        // Small delay to ensure component is fully mounted
+        const tier: SpeedTier = ['quick', 'balanced', 'complete'].includes(autostart) ? autostart : 'complete';
         setTimeout(() => handleSubmit(handles, tier), 100);
       }
     }

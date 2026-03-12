@@ -452,7 +452,7 @@ function TrioCard({
   userAvatar?: string;
 }) {
   const handles = [userHandle, trio.matchA.handle, trio.matchB.handle];
-  const analysisUrl = `/?handles=${handles.map(h => encodeURIComponent(h)).join(',')}&autostart=quick`;
+  const analysisUrl = `/?handles=${handles.map(h => encodeURIComponent(h)).join(',')}&autostart=complete`;
 
   return (
     <div style={{
@@ -609,7 +609,7 @@ function NoCacheView({ user, onReset }: {
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
         {user && (
           <a
-            href={`/?handles=${encodeURIComponent(user.handle)}&autostart=quick`}
+            href={`/?handles=${encodeURIComponent(user.handle)}&autostart=complete`}
             style={{
               display: 'inline-block', padding: '12px 24px',
               background: 'var(--color-navy)', color: '#F8FFFF', borderRadius: 4,

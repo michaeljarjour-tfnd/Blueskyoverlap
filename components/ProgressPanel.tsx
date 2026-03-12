@@ -57,12 +57,20 @@ interface Props {
   accountCount?: number;
 }
 
+function formatTimeRemaining(seconds: number): string {
+  if (seconds < 5) return 'Almost done';
+  if (seconds < 60) return `~${Math.ceil(seconds / 5) * 5}s remaining`;
+  const mins = Math.ceil(seconds / 60);
+  return `~${mins} min remaining`;
+}
+
 export default function ProgressPanel({
   pct,
   followerProgress,
   postProgress,
   speedTier,
   fetchPhase,
+  timeEstimate,
 }: Props) {
   const [displayWord, setDisplayWord] = useState('Fetching');
   const [typedChars, setTypedChars] = useState(0);
@@ -223,6 +231,21 @@ export default function ProgressPanel({
           <div className="progress-bar-fill" style={{ width: `${postPct}%` }} />
         </div>
       </div>
+
+      {/* Time remaining estimate */}
+      {timeEstimate != null && timeEstimate > 0 && pct < 95 && (
+        <div
+          style={{
+            marginTop: 12,
+            fontSize: 12,
+            color: 'var(--color-text-faint)',
+            fontFamily: 'var(--font-mono)',
+            textAlign: 'center',
+          }}
+        >
+          {formatTimeRemaining(timeEstimate)}
+        </div>
+      )}
     </div>
   );
 }

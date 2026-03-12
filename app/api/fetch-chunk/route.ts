@@ -43,7 +43,10 @@ export async function POST(req: NextRequest) {
   // 1. Check if final set already exists in Redis
   const { cached, count } = await isFinalCached(did, tier, dataType);
   if (cached) {
-    return json({ status: 'cached', fetched: count, total: count });
+    // For engagement, count = engager DIDs, not posts — use maxPosts as the "total"
+    // so progress bar shows posts, not engagers. For followers, count is correct.
+    const reportTotal = dataType === 'engagement' ? (maxPosts || 60) : count;
+    return json({ status: 'cached', fetched: reportTotal, total: reportTotal });
   }
 
   const startTime = Date.now();
@@ -210,8 +213,8 @@ async function fetchEngagementChunk(
   if (postIndex >= feedUris.length) {
     // All posts processed
     await finalizeSet(did, tier, 'engagement');
-    const finalCount = await getFinalCount(did, tier, 'engagement');
-    return json({ status: 'complete', fetched: finalCount, total });
+    // Report posts analyzed (not engager count) so progress bar stays consistent
+    return json({ status: 'complete', fetched: total, total });
   }
 
   // Time budget expired — save progress

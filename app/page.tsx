@@ -244,6 +244,7 @@ function HomeInner() {
   const handleSseSubmit = useCallback(
     async (handles: string[], speedTier: SpeedTier, ctrl: AbortController) => {
       try {
+        fetchStartRef.current = Date.now();
         const res = await fetch('/api/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -284,6 +285,15 @@ function HomeInner() {
                   followerProgress: event.followerProgress,
                   postProgress: event.postProgress,
                 });
+                // Time estimate for SSE mode based on overall pct
+                const elapsed = (Date.now() - fetchStartRef.current) / 1000;
+                if (event.pct > 15 && event.pct < 90 && elapsed > 2) {
+                  const rate = event.pct / elapsed;
+                  const remaining = Math.max(0, (100 - event.pct) / rate);
+                  setTimeEstimate(remaining);
+                } else if (event.pct >= 90) {
+                  setTimeEstimate(null);
+                }
               } else if (event.type === 'result') {
                 resultReceived = true;
                 setResult(event.data);
@@ -559,6 +569,7 @@ function HomeInner() {
           postProgress={progress.postProgress}
           speedTier={activeSpeedTier}
           fetchPhase={fetchPhase}
+          timeEstimate={timeEstimate}
         />
       )}
 

@@ -372,8 +372,21 @@ function Header() {
         Meet Your Match
       </h1>
       <p style={{ color: 'var(--color-text-muted)', fontSize: 15, maxWidth: 540, lineHeight: 1.6, margin: 0 }}>
-        Discover collaboration opportunities with journalists who share your audience.
+        Get matching recommendations based on your Bluesky followers.
       </p>
+      <a
+        href="/"
+        style={{
+          display: 'inline-block',
+          marginTop: 14,
+          fontSize: 13,
+          color: 'var(--color-blue)',
+          textDecoration: 'none',
+          fontWeight: 500,
+        }}
+      >
+        Select accounts to analyze →
+      </a>
     </div>
   );
 }
@@ -382,10 +395,22 @@ function Header() {
 
 function Footer() {
   return (
-    <footer style={{ marginTop: 64, paddingTop: 24, borderTop: '1px solid var(--color-border)', textAlign: 'left' }}>
-      <p style={{ fontSize: 12, color: 'var(--color-text-faint)', margin: 0, lineHeight: 1.6 }}>
-        Created by Trustfnd. Collaborative growth for independent journalism.
-      </p>
+    <footer style={{
+      marginTop: 64, paddingTop: 32, borderTop: '1px solid var(--color-border)',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16,
+    }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/trustfnd-wordmark-red.svg" alt="Trustfnd" style={{ height: 28, width: 'auto' }} />
+      <div style={{ display: 'flex', gap: 24 }}>
+        <a href="https://trustfnd.com/terms-and-privacy" target="_blank" rel="noopener noreferrer"
+          style={{ fontSize: 13, color: 'var(--color-text-muted)', textDecoration: 'none' }}>
+          Terms of Service
+        </a>
+        <a href="https://trustfnd.com/terms-and-privacy" target="_blank" rel="noopener noreferrer"
+          style={{ fontSize: 13, color: 'var(--color-text-muted)', textDecoration: 'none' }}>
+          Privacy Policy
+        </a>
+      </div>
     </footer>
   );
 }
@@ -708,6 +733,9 @@ function TrioCard({
 
       {/* Deep dive */}
       <div style={{ textAlign: 'right' }}>
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 4px' }}>
+          Discover engagement overlaps and how many people you could convert together
+        </p>
         <a href={analysisUrl} style={{
           fontSize: 13, color: 'var(--color-blue)', textDecoration: 'none', fontWeight: 500,
         }}>
@@ -959,6 +987,9 @@ function PairCard({
       </div>
 
       <div style={{ textAlign: 'right' }}>
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 4px' }}>
+          Discover engagement overlaps and how many people you could convert together
+        </p>
         <a href={analysisUrl} style={{ fontSize: 13, color: 'var(--color-blue)', textDecoration: 'none', fontWeight: 500 }}>
           Run full analysis →
         </a>

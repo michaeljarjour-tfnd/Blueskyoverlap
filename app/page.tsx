@@ -141,8 +141,21 @@ function Header() {
           margin: 0,
         }}
       >
-        Analyze how much your audience overlaps with another Bluesky user.
+        Discover overlaps for potential collaborators based on your Bluesky followers.
       </p>
+      <a
+        href="/partners"
+        style={{
+          display: 'inline-block',
+          marginTop: 14,
+          fontSize: 13,
+          color: 'var(--color-blue)',
+          textDecoration: 'none',
+          fontWeight: 500,
+        }}
+      >
+        Get collaborator matches →
+      </a>
     </div>
   );
 }
@@ -154,21 +167,39 @@ function Footer() {
     <footer
       style={{
         marginTop: 64,
-        paddingTop: 24,
+        paddingTop: 32,
         borderTop: '1px solid var(--color-border)',
-        textAlign: 'left',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 16,
       }}
     >
-      <p
-        style={{
-          fontSize: 12,
-          color: 'var(--color-text-faint)',
-          margin: 0,
-          lineHeight: 1.6,
-        }}
-      >
-        Created by Trustfnd. Collaborative growth for independent journalism.
-      </p>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/trustfnd-wordmark-red.svg"
+        alt="Trustfnd"
+        style={{ height: 28, width: 'auto' }}
+      />
+      <div style={{ display: 'flex', gap: 24 }}>
+        <a
+          href="https://trustfnd.com/terms-and-privacy"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ fontSize: 13, color: 'var(--color-text-muted)', textDecoration: 'none' }}
+        >
+          Terms of Service
+        </a>
+        <a
+          href="https://trustfnd.com/terms-and-privacy"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ fontSize: 13, color: 'var(--color-text-muted)', textDecoration: 'none' }}
+        >
+          Privacy Policy
+        </a>
+      </div>
     </footer>
   );
 }

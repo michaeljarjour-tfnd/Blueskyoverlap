@@ -291,13 +291,16 @@ function Galaxy() {
   // Shared segments sit between their parent accounts.
   // Layout order (clockwise from top): user-unique, user+A, A-unique, A+B, B-unique, user+B
   // Three-way in the very center.
+  // Color-blending approach: each creator gets a distinct hue,
+  // overlaps are the natural blend of their parents' colors.
+  // Pink (Jon) + Blue (Jim) = Purple, Pink + Cyan (talia) = Lavender, Blue + Cyan = Teal
   const segments = [
-    { id: 'user', label: 'Only Jon', value: uniqueUser, shade: '#93c5fd', activeShade: '#3b82f6', owners: ['user'] },
-    { id: 'userA', label: 'Jon & Jim', value: TRIO_DATA.overlaps.userA, shade: '#a5b4fc', activeShade: '#6366f1', owners: ['user', 'a'] },
-    { id: 'a', label: 'Only Jim', value: uniqueA, shade: '#c4b5fd', activeShade: '#8b5cf6', owners: ['a'] },
-    { id: 'ab', label: 'Jim & talia', value: TRIO_DATA.overlaps.ab, shade: '#c7d2fe', activeShade: '#818cf8', owners: ['a', 'b'] },
-    { id: 'b', label: 'Only talia', value: uniqueB, shade: '#bfdbfe', activeShade: '#60a5fa', owners: ['b'] },
-    { id: 'userB', label: 'Jon & talia', value: TRIO_DATA.overlaps.userB, shade: '#a5f3fc', activeShade: '#22d3ee', owners: ['user', 'b'] },
+    { id: 'user', label: 'Only Jon', value: uniqueUser, shade: '#f9a8d4', activeShade: '#ec4899', owners: ['user'] },           // pink
+    { id: 'userA', label: 'Jon & Jim', value: TRIO_DATA.overlaps.userA, shade: '#c4b5fd', activeShade: '#8b5cf6', owners: ['user', 'a'] }, // purple (pink×blue)
+    { id: 'a', label: 'Only Jim', value: uniqueA, shade: '#93c5fd', activeShade: '#3b82f6', owners: ['a'] },                     // blue
+    { id: 'ab', label: 'Jim & talia', value: TRIO_DATA.overlaps.ab, shade: '#7dd3fc', activeShade: '#0ea5e9', owners: ['a', 'b'] },       // teal (blue×cyan)
+    { id: 'b', label: 'Only talia', value: uniqueB, shade: '#a5f3fc', activeShade: '#22d3ee', owners: ['b'] },                   // cyan
+    { id: 'userB', label: 'Jon & talia', value: TRIO_DATA.overlaps.userB, shade: '#ddd6fe', activeShade: '#a78bfa', owners: ['user', 'b'] }, // lavender (pink×cyan)
   ];
 
   const ringTotal = segments.reduce((s, seg) => s + seg.value, 0);
@@ -354,28 +357,28 @@ function Galaxy() {
       y: cy + r * Math.sin(theta),
       segId: 'center',
       owners: ['user', 'a', 'b'],
-      shade: '#c7d2fe',
-      activeShade: '#4f46e5',
+      shade: '#a78bfa',
+      activeShade: '#6d28d9',
     });
   }
 
-  const [hovered, setHovered] = useState<string | null>(null);
+  const [hovered, setHovered] = useState<string | null>('center');
 
   const accounts = [
-    { id: 'user', name: 'Jon', size: TRIO_DATA.user.size, shade: '#3b82f6' },
-    { id: 'a', name: 'Jim', size: TRIO_DATA.matchA.size, shade: '#8b5cf6' },
-    { id: 'b', name: 'talia', size: TRIO_DATA.matchB.size, shade: '#60a5fa' },
+    { id: 'user', name: 'Jon', size: TRIO_DATA.user.size, shade: '#ec4899' },   // pink
+    { id: 'a', name: 'Jim', size: TRIO_DATA.matchA.size, shade: '#3b82f6' },    // blue
+    { id: 'b', name: 'talia', size: TRIO_DATA.matchB.size, shade: '#22d3ee' },  // cyan
   ];
 
   const isActive = (dot: Dot) => {
-    if (hovered === null) return false; // no highlight = all same calm blue
+    if (hovered === null) return false;
     if (hovered === 'center') return dot.segId === 'center';
     return dot.owners.includes(hovered);
   };
 
   const getSubline = () => {
-    if (hovered === null) return { text: 'Hover to explore', color: '#94a3b8' };
-    if (hovered === 'center') return { text: `${fmt(TRIO_DATA.overlaps.threeWay)} follow all of you`, color: '#4f46e5' };
+    if (hovered === null) return { text: 'Tap a name to explore', color: '#94a3b8' };
+    if (hovered === 'center') return { text: `${fmt(TRIO_DATA.overlaps.threeWay)} follow all of you`, color: '#6d28d9' };
     const acc = accounts.find(a => a.id === hovered)!;
     // Count how many of this person's followers are shared with at least one other
     const sharedCount = acc.id === 'user'
@@ -410,7 +413,62 @@ function Galaxy() {
         {subline.text}
       </div>
 
-      <svg viewBox="0 0 400 400" style={{ width: '100%', maxWidth: 420, display: 'block', margin: '0 auto' }}>
+      <svg viewBox="-20 -20 440 440" style={{ width: '100%', maxWidth: 460, display: 'block', margin: '0 auto', cursor: 'pointer' }}
+        onMouseLeave={() => setHovered('center')}>
+        {/* Invisible hover zones per segment — one wedge-shaped path each */}
+        {(() => {
+          // Build invisible hover wedges so hovering anywhere in a segment's area triggers highlight
+          const wedgePaths: { id: string; owners: string[]; path: string }[] = [];
+          for (const range of angleRanges) {
+            const seg = segments[range.segIdx];
+            const r = maxR + 5;
+            const x1 = cx + r * Math.cos(range.startAngle);
+            const y1 = cy + r * Math.sin(range.startAngle);
+            const x2 = cx + r * Math.cos(range.endAngle);
+            const y2 = cy + r * Math.sin(range.endAngle);
+            const largeArc = (range.endAngle - range.startAngle) > Math.PI ? 1 : 0;
+            // Determine which account IDs this segment represents for hover
+            const hoverTarget = seg.owners.length === 1 ? seg.owners[0] : seg.id;
+            wedgePaths.push({
+              id: hoverTarget,
+              owners: seg.owners,
+              path: `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`,
+            });
+          }
+          // Center circle zone
+          wedgePaths.push({
+            id: 'center',
+            owners: ['user', 'a', 'b'],
+            path: '',
+          });
+          return wedgePaths.map((w, i) =>
+            w.path ? (
+              <path
+                key={`zone-${i}`}
+                d={w.path}
+                fill="transparent"
+                onMouseEnter={() => {
+                  // For shared segments, highlight the first owner
+                  if (w.owners.length === 1) setHovered(w.owners[0]);
+                  else setHovered(w.owners[0]); // hover shared → highlight first owner
+                }}
+                onClick={() => {
+                  if (w.owners.length === 1) setHovered(w.owners[0]);
+                  else setHovered(w.owners[0]);
+                }}
+              />
+            ) : (
+              <circle
+                key={`zone-center`}
+                cx={cx} cy={cy} r={24}
+                fill="transparent"
+                onMouseEnter={() => setHovered('center')}
+                onClick={() => setHovered('center')}
+              />
+            )
+          );
+        })()}
+
         {/* All dots */}
         {allDots.map((dot, i) => {
           const active = isActive(dot);
@@ -421,10 +479,76 @@ function Galaxy() {
               cx={dot.x} cy={dot.y} r={dotR}
               fill={noHover ? dot.shade : (active ? dot.activeShade : '#e9ecf0')}
               opacity={noHover ? 0.7 : (active ? 0.85 : 0.25)}
-              style={{ transition: 'fill 0.5s ease, opacity 0.5s ease' }}
+              style={{ transition: 'fill 0.5s ease, opacity 0.5s ease', pointerEvents: 'none' }}
             />
           );
         })}
+
+        {/* Creator avatars at outer edge of each account's wedge center */}
+        {(() => {
+          const avatarR = 18;
+          const avatarDist = maxR + avatarR + 8; // just outside the disc
+          // Find center angle for each account's wedge
+          const accountWedges: { id: string; name: string; initial: string; shade: string; centerAngle: number }[] = [];
+          for (const range of angleRanges) {
+            const seg = segments[range.segIdx];
+            if (seg.owners.length === 1) {
+              const mid = (range.startAngle + range.endAngle) / 2;
+              const acc = accounts.find(a => a.id === seg.owners[0]);
+              if (acc) {
+                accountWedges.push({
+                  id: acc.id,
+                  name: acc.name,
+                  initial: acc.name[0].toUpperCase(),
+                  shade: acc.shade,
+                  centerAngle: mid,
+                });
+              }
+            }
+          }
+          return accountWedges.map((aw) => {
+            const ax = cx + avatarDist * Math.cos(aw.centerAngle);
+            const ay = cy + avatarDist * Math.sin(aw.centerAngle);
+            const isHov = hovered === aw.id;
+            return (
+              <g
+                key={`avatar-${aw.id}`}
+                onMouseEnter={() => setHovered(aw.id)}
+                onMouseLeave={() => setHovered('center')}
+                onClick={() => setHovered(aw.id)}
+                style={{ cursor: 'pointer' }}
+              >
+                {/* Ring */}
+                <circle cx={ax} cy={ay} r={avatarR + 2}
+                  fill="none" stroke={isHov ? aw.shade : '#e2e8f0'} strokeWidth={2}
+                  style={{ transition: 'stroke 0.3s ease' }}
+                />
+                {/* Avatar circle with initial */}
+                <circle cx={ax} cy={ay} r={avatarR}
+                  fill={isHov ? aw.shade : '#f1f5f9'}
+                  style={{ transition: 'fill 0.3s ease' }}
+                />
+                <text x={ax} y={ay} textAnchor="middle" dominantBaseline="central"
+                  fill={isHov ? '#fff' : '#64748b'}
+                  fontSize={14} fontWeight={700} fontFamily="var(--font-mono)"
+                  style={{ transition: 'fill 0.3s ease', pointerEvents: 'none' }}
+                >
+                  {aw.initial}
+                </text>
+                {/* Name label */}
+                <text
+                  x={ax} y={ay + avatarR + 12}
+                  textAnchor="middle" dominantBaseline="central"
+                  fill={isHov ? aw.shade : '#94a3b8'}
+                  fontSize={10} fontWeight={600} fontFamily="var(--font-mono)"
+                  style={{ transition: 'fill 0.3s ease', pointerEvents: 'none' }}
+                >
+                  {aw.name}
+                </text>
+              </g>
+            );
+          });
+        })()}
       </svg>
 
       {/* Account buttons */}
@@ -435,8 +559,8 @@ function Galaxy() {
             <button
               key={acc.id}
               onMouseEnter={() => setHovered(acc.id)}
-              onMouseLeave={() => setHovered(null)}
-              onClick={() => setHovered(hovered === acc.id ? null : acc.id)}
+              onMouseLeave={() => setHovered('center')}
+              onClick={() => setHovered(hovered === acc.id ? 'center' : acc.id)}
               style={{
                 padding: '6px 16px', borderRadius: 20, border: 'none', cursor: 'pointer',
                 backgroundColor: isHov ? acc.shade : '#f1f5f9',
@@ -451,11 +575,11 @@ function Galaxy() {
         })}
         <button
           onMouseEnter={() => setHovered('center')}
-          onMouseLeave={() => setHovered(null)}
-          onClick={() => setHovered(hovered === 'center' ? null : 'center')}
+          onMouseLeave={() => setHovered('center')}
+          onClick={() => setHovered(hovered === 'center' ? 'center' : 'center')}
           style={{
             padding: '6px 12px', borderRadius: 20, border: 'none', cursor: 'pointer',
-            backgroundColor: hovered === 'center' ? '#4f46e5' : '#f1f5f9',
+            backgroundColor: hovered === 'center' ? '#6d28d9' : '#f1f5f9',
             color: hovered === 'center' ? '#fff' : '#64748b',
             fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)',
             transition: 'all 0.3s ease',

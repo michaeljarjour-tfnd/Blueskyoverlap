@@ -271,6 +271,228 @@ function ParticleDotsStructured() {
   );
 }
 
+// ── Visualization: Circle of Followers ────────────────────────────────────────
+// Calm, circular arrangement. All blue palette. Hover a user to see their followers.
+
+function CircleOfFollowers() {
+  const total = TRIO_DATA.totalReach;
+
+  const uniqueUser = TRIO_DATA.user.size - TRIO_DATA.overlaps.userA - TRIO_DATA.overlaps.userB - TRIO_DATA.overlaps.threeWay;
+  const uniqueA = TRIO_DATA.matchA.size - TRIO_DATA.overlaps.userA - TRIO_DATA.overlaps.ab - TRIO_DATA.overlaps.threeWay;
+  const uniqueB = TRIO_DATA.matchB.size - TRIO_DATA.overlaps.userB - TRIO_DATA.overlaps.ab - TRIO_DATA.overlaps.threeWay;
+
+  // Segments arranged clockwise around the circle
+  // Order: unique-user, user+A overlap, unique-A, A+B overlap, unique-B, user+B overlap
+  // Three-way goes in the center
+  const segments = [
+    { id: 'user', label: 'Only Jon', value: uniqueUser, shade: '#93c5fd', owners: ['user'] },
+    { id: 'userA', label: 'Jon & Jim', value: TRIO_DATA.overlaps.userA, shade: '#6366f1', owners: ['user', 'a'] },
+    { id: 'a', label: 'Only Jim', value: uniqueA, shade: '#a5b4fc', owners: ['a'] },
+    { id: 'ab', label: 'Jim & talia', value: TRIO_DATA.overlaps.ab, shade: '#818cf8', owners: ['a', 'b'] },
+    { id: 'b', label: 'Only talia', value: uniqueB, shade: '#c7d2fe', owners: ['b'] },
+    { id: 'userB', label: 'Jon & talia', value: TRIO_DATA.overlaps.userB, shade: '#7dd3fc', owners: ['user', 'b'] },
+  ];
+
+  const cx = 200, cy = 195;
+  const ringRadius = 130;
+  const dotR = 2.8;
+  const totalRing = segments.reduce((s, seg) => s + seg.value, 0);
+
+  // Build dots around the ring
+  type Dot = { x: number; y: number; segment: string; owners: string[]; shade: string; angle: number };
+  const dots: Dot[] = [];
+  let angleOffset = -Math.PI / 2; // start at top
+
+  for (const seg of segments) {
+    const arcLength = (seg.value / totalRing) * Math.PI * 2;
+    const dotCount = Math.max(1, Math.round((seg.value / totalRing) * 450));
+    for (let i = 0; i < dotCount; i++) {
+      const t = i / dotCount;
+      const angle = angleOffset + t * arcLength;
+      // Add slight radial jitter for organic feel
+      const jitter = (Math.sin(i * 7.3) * 0.4 + Math.cos(i * 13.1) * 0.3) * 8;
+      const r = ringRadius + jitter;
+      dots.push({
+        x: cx + r * Math.cos(angle),
+        y: cy + r * Math.sin(angle),
+        segment: seg.id,
+        owners: seg.owners,
+        shade: seg.shade,
+        angle,
+      });
+    }
+    angleOffset += arcLength;
+  }
+
+  // Center dots for three-way overlap
+  const threeWayCount = Math.max(4, Math.round((TRIO_DATA.overlaps.threeWay / totalRing) * 450));
+  const centerDots: Dot[] = [];
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < threeWayCount; i++) {
+    const r = 20 * Math.sqrt(i / threeWayCount);
+    const theta = i * goldenAngle;
+    centerDots.push({
+      x: cx + r * Math.cos(theta),
+      y: cy + r * Math.sin(theta),
+      segment: 'center',
+      owners: ['user', 'a', 'b'],
+      shade: '#4f46e5',
+      angle: theta,
+    });
+  }
+
+  const [hovered, setHovered] = useState<string | null>('center'); // start with center highlighted
+
+  const accounts = [
+    { id: 'user', name: 'Jon', handle: TRIO_DATA.user.handle, size: TRIO_DATA.user.size, shade: '#3b82f6' },
+    { id: 'a', name: 'Jim', handle: TRIO_DATA.matchA.handle, size: TRIO_DATA.matchA.size, shade: '#6366f1' },
+    { id: 'b', name: 'talia', handle: TRIO_DATA.matchB.handle, size: TRIO_DATA.matchB.size, shade: '#a78bfa' },
+  ];
+
+  // Which dots are "active" based on hover?
+  const isActive = (dot: Dot) => {
+    if (hovered === null) return true;
+    if (hovered === 'center') return dot.segment === 'center';
+    return dot.owners.includes(hovered);
+  };
+
+  // Info text for current hover
+  const getHoverInfo = () => {
+    if (hovered === null) return { text: `${fmt(total)} unique followers across all three`, color: '#64748b' };
+    if (hovered === 'center') return { text: `${fmt(TRIO_DATA.overlaps.threeWay)} follow all three`, color: '#4f46e5' };
+    const acc = accounts.find(a => a.id === hovered)!;
+    return { text: `${fmt(acc.size)} follow ${acc.name}`, color: acc.shade };
+  };
+
+  const info = getHoverInfo();
+
+  return (
+    <div>
+      <style>{`
+        @keyframes circFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes centerPulse {
+          0%, 100% { opacity: 0.9; }
+          50% { opacity: 0.6; }
+        }
+      `}</style>
+
+      <svg viewBox="0 0 400 400" style={{ width: '100%', maxWidth: 440 }}>
+        {/* Subtle ring guide */}
+        <circle cx={cx} cy={cy} r={ringRadius} fill="none" stroke="#e2e8f0" strokeWidth={0.5} />
+
+        {/* Ring dots */}
+        {dots.map((dot, i) => {
+          const active = isActive(dot);
+          return (
+            <circle
+              key={`ring-${i}`}
+              cx={dot.x} cy={dot.y} r={dotR}
+              fill={active ? dot.shade : '#e2e8f0'}
+              opacity={active ? 0.8 : 0.3}
+              style={{
+                animation: `circFadeIn 0.5s ease-out ${i * 0.002}s both`,
+                transition: 'fill 0.4s ease, opacity 0.4s ease',
+              }}
+            />
+          );
+        })}
+
+        {/* Center dots (three-way) */}
+        {centerDots.map((dot, i) => {
+          const active = isActive(dot);
+          return (
+            <circle
+              key={`center-${i}`}
+              cx={dot.x} cy={dot.y} r={dotR}
+              fill={active ? dot.shade : '#e2e8f0'}
+              opacity={active ? 0.9 : 0.3}
+              style={{
+                animation: hovered === 'center'
+                  ? `centerPulse 2s ease-in-out ${i * 0.05}s infinite`
+                  : `circFadeIn 0.4s ease-out ${0.8 + i * 0.01}s both`,
+                transition: 'fill 0.4s ease, opacity 0.4s ease',
+              }}
+            />
+          );
+        })}
+
+        {/* Center label */}
+        <text x={cx} y={cy + 35} textAnchor="middle" fontSize={10} fill="#64748b" fontFamily="var(--font-mono)" style={{ transition: 'fill 0.3s' }}>
+          {hovered === 'center' ? fmt(TRIO_DATA.overlaps.threeWay) : ''}
+        </text>
+
+        {/* Account buttons around outside */}
+        {accounts.map((acc, i) => {
+          const angle = -Math.PI / 2 + (i * Math.PI * 2) / 3 + Math.PI / 3;
+          const labelR = ringRadius + 36;
+          const lx = cx + labelR * Math.cos(angle);
+          const ly = cy + labelR * Math.sin(angle);
+          const isHov = hovered === acc.id;
+          return (
+            <g
+              key={acc.id}
+              style={{ cursor: 'pointer' }}
+              onMouseEnter={() => setHovered(acc.id)}
+              onMouseLeave={() => setHovered(null)}
+            >
+              {/* Hit area */}
+              <circle cx={lx} cy={ly} r={24} fill="transparent" />
+              {/* Label bg */}
+              <rect
+                x={lx - 28} y={ly - 12} width={56} height={24} rx={12}
+                fill={isHov ? acc.shade : '#f1f5f9'}
+                style={{ transition: 'fill 0.3s ease' }}
+              />
+              <text x={lx} y={ly + 1} textAnchor="middle" dominantBaseline="central"
+                fontSize={11} fontWeight={600}
+                fill={isHov ? '#fff' : '#64748b'}
+                fontFamily="var(--font-mono)"
+                style={{ transition: 'fill 0.3s ease', pointerEvents: 'none' }}
+              >
+                {acc.name}
+              </text>
+              {/* Follower count below */}
+              <text x={lx} y={ly + 20} textAnchor="middle"
+                fontSize={9} fill="#94a3b8" fontFamily="var(--font-mono)"
+                style={{ pointerEvents: 'none' }}
+              >
+                {fmt(acc.size)}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Center tap target */}
+        <circle
+          cx={cx} cy={cy} r={25} fill="transparent"
+          style={{ cursor: 'pointer' }}
+          onMouseEnter={() => setHovered('center')}
+          onMouseLeave={() => setHovered(null)}
+        />
+      </svg>
+
+      {/* Info line */}
+      <div style={{
+        textAlign: 'center', marginTop: -8,
+        fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 600,
+        color: info.color,
+        minHeight: 24,
+        transition: 'color 0.3s ease',
+      }}>
+        {info.text}
+      </div>
+
+      {/* Combined reach */}
+      <div style={{ textAlign: 'center', marginTop: 8, fontSize: 11, color: '#94a3b8', fontFamily: 'var(--font-mono)' }}>
+        {fmt(total)} unique combined reach
+      </div>
+    </div>
+  );
+}
+
 // ── Visualization 5: Sankey / Flow Diagram ───────────────────────────────────
 
 function SankeyFlow() {
@@ -813,6 +1035,7 @@ export default function VisualizationsPage() {
 
       {/* Card wrapper */}
       {[
+        { title: '⭐ Circle of Followers', desc: 'Calm, circular ring of dots in blue tones. "All three" glows on load. Hover each name to see their followers light up around the ring.', component: <CircleOfFollowers /> },
         { title: '1a. Particle Dots (Organic)', desc: 'Each dot = a cluster of followers. Shared followers drift to the center. Animated on load.', component: <ParticleDots /> },
         { title: '1b. Particle Dots (Structured)', desc: 'Same concept but with clear zones, Fibonacci dot packing, hover to highlight each segment. More readable.', component: <ParticleDotsStructured /> },
         { title: '2. Sankey Flow', desc: 'Accounts on the left, audience segments on the right. Hover flows to see where each account\'s followers end up.', component: <SankeyFlow /> },

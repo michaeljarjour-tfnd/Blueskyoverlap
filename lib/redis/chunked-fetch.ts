@@ -2,7 +2,7 @@ import { getRedis } from './client';
 import type { SpeedTier, FetchDataType } from '@/lib/types';
 
 const PARTIAL_TTL = 60 * 60; // 1 hour — partial data expires if abandoned
-const FINAL_TTL = 60 * 60 * 24; // 24 hours — same as existing cache
+const FINAL_TTL = 60 * 60 * 24 * 30; // 30 days — keep data long-lived, re-fetch only if very stale
 const CHUNK_SIZE = 2000; // SADD batch size
 
 // ── Key helpers ──────────────────────────────────────────────────────────────

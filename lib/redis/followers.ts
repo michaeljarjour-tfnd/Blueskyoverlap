@@ -2,7 +2,7 @@ import { getRedis } from './client';
 import { fetchFollowers, getEngagedUsers } from '@/lib/bsky/api';
 import type { SpeedTier, EngagementStats } from '@/lib/types';
 
-const TTL_SECONDS = 60 * 60 * 24; // 24 hours
+const TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days — keep data long-lived, re-fetch only if very stale
 
 const SPEED_CAPS: Record<SpeedTier, number | null> = {
   quick: 5000,

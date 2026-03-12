@@ -238,6 +238,8 @@ function HomeInner() {
   const [timeEstimate, setTimeEstimate] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const fetchStartRef = useRef(0);
+  const dataPhaseStartRef = useRef(0);     // when real data fetching began
+  const dataPhaseStartPctRef = useRef(0);  // pct at that moment
 
   // ── SSE-based submit (Quick / Balanced) ──────────────────────────────────
 
@@ -285,14 +287,25 @@ function HomeInner() {
                   followerProgress: event.followerProgress,
                   postProgress: event.postProgress,
                 });
-                // Time estimate for SSE mode based on overall pct
-                const elapsed = (Date.now() - fetchStartRef.current) / 1000;
-                if (event.pct > 15 && event.pct < 90 && elapsed > 2) {
-                  const rate = event.pct / elapsed;
-                  const remaining = Math.max(0, (100 - event.pct) / rate);
-                  setTimeEstimate(remaining);
-                } else if (event.pct >= 90) {
+                // Time estimate for SSE mode — use follower progress when available
+                if (event.pct >= 90) {
                   setTimeEstimate(null);
+                } else if (event.followerProgress) {
+                  // Use actual follower throughput (much more accurate than pct)
+                  const entries = Object.values(event.followerProgress);
+                  const fetched = entries.reduce((s, v) => s + Math.min(v.fetched, v.max), 0);
+                  const total = entries.reduce((s, v) => s + v.max, 0);
+                  // Mark when the data phase starts (first real follower data)
+                  if (fetched > 0 && !dataPhaseStartRef.current) {
+                    dataPhaseStartRef.current = Date.now();
+                  }
+                  const dataElapsed = (Date.now() - dataPhaseStartRef.current) / 1000;
+                  if (fetched > 0 && dataElapsed > 3 && total > 0) {
+                    const rate = fetched / dataElapsed;
+                    // Followers are ~80% of the work; add ~20% buffer for engagement + compute
+                    const followerRemaining = Math.max(0, (total - fetched) / rate);
+                    setTimeEstimate(followerRemaining * 1.2);
+                  }
                 }
               } else if (event.type === 'result') {
                 resultReceived = true;
@@ -388,12 +401,17 @@ function HomeInner() {
             folProgress[did] = { fetched: chunk.fetched, max: chunk.total || totalFollowers };
             totalFetchedSoFar = Object.values(folProgress).reduce((s, v) => s + v.fetched, 0);
 
-            // Time estimate
-            const elapsed = (Date.now() - fetchStartRef.current) / 1000;
-            if (totalFetchedSoFar > 0 && elapsed > 2) {
-              const rate = totalFetchedSoFar / elapsed;
-              const remaining = Math.max(0, totalNeeded - totalFetchedSoFar) / rate;
-              setTimeEstimate(remaining);
+            // Time estimate — wait 5s for stable rate, add buffer for engagement phase
+            if (totalFetchedSoFar > 0 && !dataPhaseStartRef.current) {
+              dataPhaseStartRef.current = Date.now();
+            }
+            const dataElapsed = dataPhaseStartRef.current
+              ? (Date.now() - dataPhaseStartRef.current) / 1000
+              : 0;
+            if (totalFetchedSoFar > 0 && dataElapsed > 5) {
+              const rate = totalFetchedSoFar / dataElapsed;
+              const followerRemaining = Math.max(0, totalNeeded - totalFetchedSoFar) / rate;
+              setTimeEstimate(followerRemaining * 1.2); // +20% for engagement + compute
             }
 
             const overallPct = 10 + Math.floor((totalFetchedSoFar / Math.max(totalNeeded, 1)) * 60);
@@ -496,6 +514,8 @@ function HomeInner() {
       setResult(null);
       setErrorMsg(null);
       setFetchPhase(undefined);
+      dataPhaseStartRef.current = 0;
+      dataPhaseStartPctRef.current = 0;
       setTimeEstimate(null);
 
       if (speedTier === 'complete') {

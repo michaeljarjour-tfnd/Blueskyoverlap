@@ -68,7 +68,9 @@ type Phase = 'idle' | 'loading' | 'results' | 'error' | 'no-cache';
 
 const TOPIC_CLUSTERS: Record<string, string[]> = {
   'Politics & Government': ['Politics', 'Government Accountability', 'Policy', 'National Security', 'Foreign Policy', 'Immigration', 'Labor', 'Criminal Justice', 'Inequality'],
-  'Tech & Science': ['Tech', 'Science', 'Internet Culture', 'Data Visualization', 'Games/Gaming'],
+  'Tech & Science': ['Tech', 'Science', 'Internet Culture', 'Games/Gaming'],
+  'Data Visualization': ['Data Visualization', 'Data', 'Charts', 'Infographics', 'Data Journalism'],
+  'OSINT': ['OSINT', 'Open Source Intelligence', 'Verification', 'Fact-Checking', 'Disinformation', 'Geolocation'],
   'Business & Finance': ['Finance/Economics', 'Business', 'Personal Finance', 'Real Estate', 'Careers', 'Energy', 'Construction'],
   'Culture & Arts': ['Culture', 'Entertainment/Hollywood', 'Music', 'Film/Movies', 'Art', 'Books/Writing', 'Photography', 'Design', 'Fashion', 'Comedy', 'Gossip'],
   'Health & Lifestyle': ['Health/Wellness', 'Mental Health', 'Lifestyle', 'Fitness', 'Self Help', 'Parenting', 'Family', 'Dating/Romance', 'Running'],

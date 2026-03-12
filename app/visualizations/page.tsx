@@ -1114,41 +1114,91 @@ function ProportionalBar() {
   );
 }
 
-// ── Visualization: Rectangle Overlap (Premium) ───────────────────────────────
-// Three frosted-glass rectangles with color blending. Avatar photos in unique
-// zones. No buttons — the graph itself is the interface.
+// ── Visualization: Rectangle Overlap (v3) ─────────────────────────────────────
+// Proportional rectangles. DM Sans. Subtle glass. Sharp corners. Clean info.
 
 function RectangleOverlap() {
   const total = TRIO_DATA.totalReach;
   const [hovered, setHovered] = useState<string | null>('center');
+  const f = 'var(--font-sans)';
 
-  const uniqueUser = TRIO_DATA.user.size - TRIO_DATA.overlaps.userA - TRIO_DATA.overlaps.userB - TRIO_DATA.overlaps.threeWay;
-  const uniqueA = TRIO_DATA.matchA.size - TRIO_DATA.overlaps.userA - TRIO_DATA.overlaps.ab - TRIO_DATA.overlaps.threeWay;
-  const uniqueB = TRIO_DATA.matchB.size - TRIO_DATA.overlaps.userB - TRIO_DATA.overlaps.ab - TRIO_DATA.overlaps.threeWay;
+  // ── Proportional sizing ──────────────────────────────────────────────
+  // Rectangle area ∝ follower count. We use sqrt to get side length.
+  // Normalize to a reasonable pixel range for a ~460px wide canvas.
+  const maxSide = 230;
+  const maxSize = Math.max(TRIO_DATA.user.size, TRIO_DATA.matchA.size, TRIO_DATA.matchB.size);
+  const side = (n: number) => Math.round(maxSide * Math.sqrt(n / maxSize));
 
-  // Three rectangles: Jon (pink) bottom-left, Jim (blue) top-center, talia (cyan) right
+  const userW = side(TRIO_DATA.user.size);
+  const userH = Math.round(userW * 0.88);
+  const aW = side(TRIO_DATA.matchA.size);
+  const aH = Math.round(aW * 0.88);
+  const bW = side(TRIO_DATA.matchB.size);
+  const bH = Math.round(bW * 0.88);
+
+  // Position them so they overlap proportionally.
+  // Overlap amount ∝ pairwise overlap / smaller set size
+  const overlapFrac = (shared: number, s1: number, s2: number) =>
+    Math.min(0.7, Math.max(0.15, shared / Math.min(s1, s2)));
+
+  // Jon bottom-left, Jim top-center, talia right
+  // Jon–Jim: large overlap (31.4K of ~53K)
+  const userJimFrac = overlapFrac(
+    TRIO_DATA.overlaps.userA + TRIO_DATA.overlaps.threeWay,
+    TRIO_DATA.user.size, TRIO_DATA.matchA.size
+  );
+  // Jon–talia: small overlap (2.5K of ~52K)
+  const userTaliaFrac = overlapFrac(
+    TRIO_DATA.overlaps.userB + TRIO_DATA.overlaps.threeWay,
+    TRIO_DATA.user.size, TRIO_DATA.matchB.size
+  );
+  // Jim–talia: small overlap (2.2K of ~52K)
+  const jimTaliaFrac = overlapFrac(
+    TRIO_DATA.overlaps.ab + TRIO_DATA.overlaps.threeWay,
+    TRIO_DATA.matchA.size, TRIO_DATA.matchB.size
+  );
+
+  // Canvas dimensions
+  const canvasW = 460;
+  const canvasH = 340;
+
+  // Place Jon (user) on the left
+  const userX = 0;
+  const userY = canvasH - userH;
+
+  // Place Jim (a) overlapping Jon from the top-right
+  const aX = userX + userW - Math.round(aW * userJimFrac);
+  const aY = 0;
+
+  // Place talia (b) to the right, overlapping both
+  const bX = Math.max(
+    userX + userW - Math.round(bW * userTaliaFrac),
+    aX + aW - Math.round(bW * jimTaliaFrac)
+  );
+  const bY = canvasH - bH;
+
   const rects = [
     {
-      id: 'user', name: 'Jon', handle: '@jonnelledge', size: TRIO_DATA.user.size,
-      color: '#ec4899', colorLight: '#fce7f3',
-      bg: 'rgba(236, 72, 153, 0.28)', bgGlass: 'rgba(255, 255, 255, 0.15)',
-      x: 20, y: 120, w: 220, h: 200,
+      id: 'user', name: 'Jon', size: TRIO_DATA.user.size,
+      color: '#d946ef', colorMuted: 'rgba(217, 70, 239, 0.07)',
+      bg: 'rgba(217, 70, 239, 0.14)',
+      x: userX, y: userY, w: userW, h: userH,
     },
     {
-      id: 'a', name: 'Jim', handle: '@jim.londoncentric', size: TRIO_DATA.matchA.size,
-      color: '#3b82f6', colorLight: '#dbeafe',
-      bg: 'rgba(59, 130, 246, 0.28)', bgGlass: 'rgba(255, 255, 255, 0.15)',
-      x: 100, y: 40, w: 220, h: 200,
+      id: 'a', name: 'Jim', size: TRIO_DATA.matchA.size,
+      color: '#3b82f6', colorMuted: 'rgba(59, 130, 246, 0.07)',
+      bg: 'rgba(59, 130, 246, 0.14)',
+      x: aX, y: aY, w: aW, h: aH,
     },
     {
-      id: 'b', name: 'talia', handle: '@taliajane', size: TRIO_DATA.matchB.size,
-      color: '#06b6d4', colorLight: '#cffafe',
-      bg: 'rgba(6, 182, 212, 0.28)', bgGlass: 'rgba(255, 255, 255, 0.15)',
-      x: 180, y: 120, w: 220, h: 200,
+      id: 'b', name: 'talia', size: TRIO_DATA.matchB.size,
+      color: '#06b6d4', colorMuted: 'rgba(6, 182, 212, 0.07)',
+      bg: 'rgba(6, 182, 212, 0.14)',
+      x: bX, y: bY, w: bW, h: bH,
     },
   ];
 
-  // Compute overlap zones
+  // ── Overlap zones (computed from rect positions) ─────────────────────
   const intersect = (r1: typeof rects[0], r2: typeof rects[0]) => {
     const x = Math.max(r1.x, r2.x);
     const y = Math.max(r1.y, r2.y);
@@ -1178,63 +1228,74 @@ function RectangleOverlap() {
     { id: 'center', value: TRIO_DATA.overlaps.threeWay, zone: threeWayZone, owners: ['user', 'a', 'b'] },
   ];
 
-  // Avatar positions — in the unique area of each rect, away from overlaps
-  const avatarPositions: Record<string, { x: number; y: number }> = {
-    user: { x: 70, y: 260 },
-    a: { x: 160, y: 80 },
-    b: { x: 350, y: 260 },
-  };
-
-  const getSubline = () => {
-    if (hovered === null) return { text: 'Tap to explore', color: '#94a3b8' };
-    if (hovered === 'center') return { text: `${fmt(TRIO_DATA.overlaps.threeWay)} follow all three`, color: '#7c3aed' };
+  // ── Info text logic ─────────────────────────────────────────────────
+  // Default (center): show combined reach + shared count
+  // Hover creator: show their count + how many are shared
+  const getInfo = () => {
+    if (hovered === null || hovered === 'center') {
+      return {
+        headline: `${fmt(total)}`,
+        sub: `unique combined reach`,
+        detail: `${fmt(TRIO_DATA.overlaps.threeWay)} follow all three`,
+        color: '#6d28d9',
+      };
+    }
     const rect = rects.find(r => r.id === hovered)!;
-    const sharedCount = rect.id === 'user'
+    const shared = rect.id === 'user'
       ? TRIO_DATA.overlaps.userA + TRIO_DATA.overlaps.userB + TRIO_DATA.overlaps.threeWay
       : rect.id === 'a'
         ? TRIO_DATA.overlaps.userA + TRIO_DATA.overlaps.ab + TRIO_DATA.overlaps.threeWay
         : TRIO_DATA.overlaps.userB + TRIO_DATA.overlaps.ab + TRIO_DATA.overlaps.threeWay;
-    return { text: `${fmt(rect.size)} follow ${rect.name} · ${fmt(sharedCount)} shared`, color: rect.color };
+    return {
+      headline: `${fmt(rect.size)}`,
+      sub: `follow ${rect.name}`,
+      detail: `${fmt(shared)} shared with others`,
+      color: rect.color,
+    };
   };
 
-  const subline = getSubline();
+  const info = getInfo();
 
   return (
     <div>
-      {/* Headline */}
-      <div style={{ textAlign: 'center', marginBottom: 6 }}>
+      {/* ── Header: number + context ──────────────────────────── */}
+      <div style={{ textAlign: 'center', marginBottom: 24 }}>
         <div style={{
-          fontSize: 26, fontWeight: 800, fontFamily: 'var(--font-mono)',
-          color: 'var(--color-navy)', letterSpacing: '-0.03em',
+          fontSize: 36, fontWeight: 700, fontFamily: f,
+          color: info.color, letterSpacing: '-0.03em',
+          transition: 'color 0.3s ease',
+          lineHeight: 1.1,
         }}>
-          {fmt(total)} unique followers
+          {info.headline}
+        </div>
+        <div style={{
+          fontSize: 14, fontWeight: 500, fontFamily: f,
+          color: '#64748b', marginTop: 2,
+          transition: 'color 0.3s ease',
+        }}>
+          {info.sub}
+        </div>
+        <div style={{
+          fontSize: 12, fontWeight: 400, fontFamily: f,
+          color: info.color, marginTop: 4, opacity: 0.6,
+          transition: 'color 0.3s ease, opacity 0.3s ease',
+        }}>
+          {info.detail}
         </div>
       </div>
 
-      {/* Dynamic subline */}
-      <div style={{
-        textAlign: 'center', marginBottom: 20, minHeight: 20,
-        fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 500,
-        color: subline.color, transition: 'color 0.3s ease',
-        letterSpacing: '-0.01em',
-      }}>
-        {subline.text}
-      </div>
-
-      {/* Rectangle overlap — HTML div approach for real backdrop-filter glass */}
+      {/* ── The rectangles ────────────────────────────────────── */}
       <div
         style={{
-          position: 'relative', width: '100%', maxWidth: 440, height: 340,
-          margin: '0 auto', cursor: 'pointer',
+          position: 'relative', width: canvasW, maxWidth: '100%',
+          height: canvasH, margin: '0 auto',
         }}
         onMouseLeave={() => setHovered('center')}
       >
-        {/* Three glass rectangles */}
+        {/* Glass rectangles */}
         {rects.map((rect) => {
           const isActive = hovered === null || hovered === 'center' || hovered === rect.id;
-          const isDirectHover = hovered === rect.id;
-          // Scale from SVG coords to container (440×340)
-          const scale = 440 / 420;
+          const isHov = hovered === rect.id;
           return (
             <div
               key={rect.id}
@@ -1242,140 +1303,125 @@ function RectangleOverlap() {
               onClick={() => setHovered(hovered === rect.id ? 'center' : rect.id)}
               style={{
                 position: 'absolute',
-                left: rect.x * scale,
-                top: (rect.y - 20) * scale,  // shift up since our container starts higher
-                width: rect.w * scale,
-                height: rect.h * scale,
-                borderRadius: 20,
+                left: rect.x, top: rect.y,
+                width: rect.w, height: rect.h,
+                borderRadius: 4,
                 background: rect.bg,
-                backdropFilter: 'blur(8px) saturate(1.5)',
-                WebkitBackdropFilter: 'blur(8px) saturate(1.5)',
-                border: isDirectHover
-                  ? `2px solid ${rect.color}`
-                  : '1px solid rgba(255,255,255,0.4)',
-                boxShadow: isDirectHover
-                  ? `0 8px 32px ${rect.bg}, inset 0 1px 0 rgba(255,255,255,0.3)`
-                  : 'inset 0 1px 0 rgba(255,255,255,0.25)',
-                opacity: isActive ? 1 : 0.2,
-                transition: 'opacity 0.4s ease, border 0.3s ease, box-shadow 0.3s ease',
+                backdropFilter: 'blur(2px)',
+                WebkitBackdropFilter: 'blur(2px)',
+                border: isHov
+                  ? `1.5px solid ${rect.color}40`
+                  : '1px solid rgba(255,255,255,0.2)',
+                opacity: isActive ? 1 : 0.18,
+                transition: 'opacity 0.35s ease, border-color 0.3s ease',
                 mixBlendMode: 'multiply' as const,
-                zIndex: isDirectHover ? 3 : rect.id === 'a' ? 2 : 1,
+                zIndex: isHov ? 3 : rect.id === 'a' ? 2 : 1,
+                cursor: 'pointer',
               }}
             />
           );
         })}
 
-        {/* Avatars + name labels — positioned in each rect's unique area */}
+        {/* ── Avatar + name in each rect's unique zone ─────── */}
         {rects.map((rect) => {
-          const pos = avatarPositions[rect.id];
-          const scale = 440 / 420;
-          const ax = pos.x * scale;
-          const ay = (pos.y - 20) * scale;
+          // Position avatar in the corner of the rect farthest from center
+          const ax = rect.id === 'user' ? rect.x + 20
+            : rect.id === 'a' ? rect.x + rect.w - 20
+            : rect.x + rect.w - 20;
+          const ay = rect.id === 'a' ? rect.y + 24
+            : rect.y + rect.h - 24;
           const isActive = hovered === null || hovered === rect.id || hovered === 'center';
-          const isDirectHover = hovered === rect.id;
+          const isHov = hovered === rect.id;
+          // Align text left for Jon, right for Jim/talia
+          const alignRight = rect.id !== 'user';
+
           return (
             <div
-              key={`avatar-${rect.id}`}
+              key={`av-${rect.id}`}
               onMouseEnter={() => setHovered(rect.id)}
               onClick={() => setHovered(hovered === rect.id ? 'center' : rect.id)}
               style={{
                 position: 'absolute',
-                left: ax - 22, top: ay - 22,
-                width: 44, height: 44,
+                left: alignRight ? ax - 90 : ax,
+                top: ay - 16,
                 zIndex: 10,
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-                opacity: isActive ? 1 : 0.25,
-                transition: 'opacity 0.3s ease, transform 0.3s ease',
-                transform: isDirectHover ? 'scale(1.1)' : 'scale(1)',
+                display: 'flex', alignItems: 'center', gap: 8,
+                flexDirection: alignRight ? 'row-reverse' : 'row',
+                opacity: isActive ? 1 : 0.2,
+                transition: 'opacity 0.3s ease',
+                cursor: 'pointer',
               }}
             >
-              {/* Avatar circle */}
+              {/* Avatar */}
               <div style={{
-                width: 40, height: 40, borderRadius: '50%',
-                background: isDirectHover
-                  ? `linear-gradient(135deg, ${rect.color}, ${rect.colorLight})`
-                  : `linear-gradient(135deg, ${rect.colorLight}, #fff)`,
-                border: `2.5px solid ${isDirectHover ? rect.color : 'rgba(255,255,255,0.8)'}`,
-                boxShadow: isDirectHover
-                  ? `0 4px 16px ${rect.bg}`
-                  : '0 2px 8px rgba(0,0,0,0.08)',
+                width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                background: isHov ? rect.color : `${rect.color}18`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.3s ease',
-                flexShrink: 0,
+                transition: 'background 0.3s ease',
               }}>
                 <span style={{
-                  fontSize: 16, fontWeight: 800,
-                  color: isDirectHover ? '#fff' : rect.color,
-                  fontFamily: 'var(--font-mono)',
+                  fontSize: 13, fontWeight: 600, fontFamily: f,
+                  color: isHov ? '#fff' : rect.color,
                   transition: 'color 0.3s ease',
                 }}>
                   {rect.name[0]}
                 </span>
               </div>
-              {/* Name + count */}
-              <div style={{
-                marginTop: 4, textAlign: 'center', whiteSpace: 'nowrap',
-              }}>
+              {/* Name */}
+              <div style={{ textAlign: alignRight ? 'right' : 'left' }}>
                 <div style={{
-                  fontSize: 11, fontWeight: 700, color: rect.color,
-                  fontFamily: 'var(--font-mono)', letterSpacing: '-0.02em',
+                  fontSize: 13, fontWeight: 600, fontFamily: f,
+                  color: rect.color, lineHeight: 1.2,
                 }}>
                   {rect.name}
                 </div>
-                <div style={{
-                  fontSize: 9, fontWeight: 500, color: rect.color,
-                  fontFamily: 'var(--font-mono)', opacity: 0.6,
-                }}>
-                  {fmt(rect.size)}
-                </div>
+                {isHov && (
+                  <div style={{
+                    fontSize: 11, fontWeight: 400, fontFamily: f,
+                    color: '#94a3b8', lineHeight: 1.2, marginTop: 1,
+                  }}>
+                    {fmt(rect.size)}
+                  </div>
+                )}
               </div>
             </div>
           );
         })}
 
-        {/* Overlap zone number labels */}
+        {/* ── Overlap zone labels (only show on relevant hover) ── */}
         {zones.map((z) => {
           if (!z.zone) return null;
-          const scale = 440 / 420;
           const isCenter = z.id === 'center';
-          const isActive = hovered === null || hovered === 'center' || z.owners.includes(hovered);
+          // Only show pairwise numbers when one of the pair is hovered
+          // Always show center when in default/center state
+          const show = isCenter
+            ? (hovered === null || hovered === 'center')
+            : z.owners.includes(hovered || '');
+          if (!show) return null;
+
           return (
             <div
-              key={`zone-${z.id}`}
+              key={`z-${z.id}`}
               onMouseEnter={() => {
                 if (isCenter) setHovered('center');
                 else setHovered(z.owners[0]);
               }}
-              onClick={() => { if (isCenter) setHovered('center'); }}
               style={{
                 position: 'absolute',
-                left: z.zone.cx * scale - (isCenter ? 28 : 20),
-                top: (z.zone.cy - 20) * scale - (isCenter ? 14 : 8),
-                width: isCenter ? 56 : 40,
-                textAlign: 'center',
-                zIndex: 10,
-                opacity: isActive ? 1 : 0.15,
-                transition: 'opacity 0.3s ease',
-                pointerEvents: 'auto' as const,
+                left: z.zone.cx - 24,
+                top: z.zone.cy - (isCenter ? 12 : 8),
+                width: 48, textAlign: 'center',
+                zIndex: 10, cursor: 'pointer',
               }}
             >
               <div style={{
-                fontSize: isCenter ? 16 : 11,
-                fontWeight: isCenter ? 800 : 600,
-                color: isCenter ? '#7c3aed' : '#475569',
-                fontFamily: 'var(--font-mono)',
-                letterSpacing: '-0.02em',
+                fontSize: isCenter ? 15 : 11,
+                fontWeight: isCenter ? 700 : 500,
+                color: isCenter ? '#6d28d9' : '#64748b',
+                fontFamily: f,
               }}>
                 {fmt(z.value)}
               </div>
-              {isCenter && (
-                <div style={{
-                  fontSize: 8, fontWeight: 500, color: '#7c3aed',
-                  fontFamily: 'var(--font-mono)', opacity: 0.6, marginTop: 1,
-                }}>
-                  all three
-                </div>
-              )}
             </div>
           );
         })}

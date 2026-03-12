@@ -224,6 +224,9 @@ interface TrioRecommendation {
     b: number;
   };
   totalReach: number;
+  newAudienceForUser: number;
+  newAudienceForA: number;
+  newAudienceForB: number;
   trioScore: number;
   overlapLevel: 'high' | 'medium' | 'low';
   signals: {
@@ -245,6 +248,8 @@ interface PairRecommendation {
   overlap: number;
   sizes: { user: number; match: number };
   totalReach: number;
+  newAudienceForUser: number;
+  newAudienceForMatch: number;
   pairScore: number;
   overlapLevel: 'high' | 'medium' | 'low';
   signals: {
@@ -424,7 +429,12 @@ export async function GET(req: NextRequest) {
       }
 
       const pairs: PairRecommendation[] = topPairs.map(s => {
-        const totalReach = userSet.size + s.setSize - s.overlapWithUser;
+        // Use real follower count from directory if available, fall back to set size
+        const matchRealCount = s.entry.followerCount || s.setSize;
+        const totalReach = userFollowerCount + matchRealCount - s.overlapWithUser;
+        // New audience: followers they bring that the other doesn't have
+        const newAudienceForUser = matchRealCount - s.overlapWithUser;
+        const newAudienceForMatch = userFollowerCount - s.overlapWithUser;
         return {
           match: {
             did: s.entry.did,
@@ -432,11 +442,13 @@ export async function GET(req: NextRequest) {
             displayName: s.entry.displayName,
             avatar: avatarMap.get(s.entry.did),
             geography: s.entry.geography,
-            followerCount: s.setSize,
+            followerCount: matchRealCount,
           },
           overlap: s.overlapWithUser,
-          sizes: { user: userSet.size, match: s.setSize },
+          sizes: { user: userFollowerCount, match: matchRealCount },
           totalReach,
+          newAudienceForUser: Math.max(0, newAudienceForUser),
+          newAudienceForMatch: Math.max(0, newAudienceForMatch),
           pairScore: Math.round(s.compositeScore * 1000) / 1000,
           overlapLevel: getOverlapLevel(s.jaccardWithUser),
           signals: {
@@ -564,9 +576,19 @@ export async function GET(req: NextRequest) {
       const b = candidates[trio.iB];
       const threeWay = (trio as CandidateTrio & { threeWayOverlap?: number }).threeWayOverlap ?? 0;
 
+      // Use real follower counts from directory if available
+      const aRealCount = a.entry.followerCount || a.setSize;
+      const bRealCount = b.entry.followerCount || b.setSize;
+
       // Inclusion-exclusion: |A ∪ B ∪ C| = |A| + |B| + |C| - |A∩B| - |A∩C| - |B∩C| + |A∩B∩C|
-      const totalReach = userSet.size + a.setSize + b.setSize
+      const totalReach = userFollowerCount + aRealCount + bRealCount
         - a.overlapWithUser - b.overlapWithUser - trio.abOverlap + threeWay;
+
+      // New audience each collaborator brings to YOU
+      // (their followers minus the ones you already have)
+      const newAudienceForUser = (aRealCount - a.overlapWithUser) + (bRealCount - b.overlapWithUser) - trio.abOverlap + threeWay;
+      const newAudienceForA = (userFollowerCount - a.overlapWithUser) + (bRealCount - trio.abOverlap);
+      const newAudienceForB = (userFollowerCount - b.overlapWithUser) + (aRealCount - trio.abOverlap);
 
       // Average Jaccard for the trio's overlap level
       const avgJaccard = (a.jaccardWithUser + b.jaccardWithUser + trio.abJaccard) / 3;
@@ -578,7 +600,7 @@ export async function GET(req: NextRequest) {
           displayName: a.entry.displayName,
           avatar: avatarMap.get(a.entry.did),
           geography: a.entry.geography,
-          followerCount: a.setSize,
+          followerCount: aRealCount,
         },
         matchB: {
           did: b.entry.did,
@@ -586,7 +608,7 @@ export async function GET(req: NextRequest) {
           displayName: b.entry.displayName,
           avatar: avatarMap.get(b.entry.did),
           geography: b.entry.geography,
-          followerCount: b.setSize,
+          followerCount: bRealCount,
         },
         overlaps: {
           userA: a.overlapWithUser,
@@ -595,11 +617,14 @@ export async function GET(req: NextRequest) {
           threeWay,
         },
         sizes: {
-          user: userSet.size,
-          a: a.setSize,
-          b: b.setSize,
+          user: userFollowerCount,
+          a: aRealCount,
+          b: bRealCount,
         },
         totalReach,
+        newAudienceForUser: Math.max(0, newAudienceForUser),
+        newAudienceForA: Math.max(0, newAudienceForA),
+        newAudienceForB: Math.max(0, newAudienceForB),
         trioScore: Math.round(trio.trioScore * 1000) / 1000,
         overlapLevel: getOverlapLevel(avgJaccard),
         signals: {

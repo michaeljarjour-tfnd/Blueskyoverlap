@@ -29,6 +29,9 @@ interface TrioRecommendation {
     b: number;
   };
   totalReach: number;
+  newAudienceForUser: number;
+  newAudienceForA: number;
+  newAudienceForB: number;
   trioScore: number;
   overlapLevel: 'high' | 'medium' | 'low';
   signals: {
@@ -43,6 +46,8 @@ interface PairRecommendation {
   overlap: number;
   sizes: { user: number; match: number };
   totalReach: number;
+  newAudienceForUser: number;
+  newAudienceForMatch: number;
   pairScore: number;
   overlapLevel: 'high' | 'medium' | 'low';
   signals: {
@@ -586,14 +591,31 @@ function TrioCard({
             {rank}
           </span>
           <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-navy)' }}>
-            Collaboration #{rank}
+            You + {trio.matchA.displayName || trio.matchA.handle} + {trio.matchB.displayName || trio.matchB.handle}
           </span>
         </div>
         {/* Signals */}
-        <div style={{ display: 'flex', gap: 2 }}>
+        <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
           {trio.signals.sizeMatch && <SignalBadge label="Similar size" />}
           {trio.signals.topicMatch && <SignalBadge label="Topic match" />}
           {trio.signals.geoMatch && <SignalBadge label="Same region" />}
+        </div>
+      </div>
+
+      {/* Combined reach — hero */}
+      <div style={{
+        textAlign: 'center', padding: '20px 16px', marginBottom: 16,
+        background: 'linear-gradient(135deg, #EBF2FD 0%, #f0f7ff 100%)',
+        borderRadius: 6, border: '1px solid #d6e4f5',
+      }}>
+        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-blue)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+          Combined audience
+        </div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 32, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+          {formatFollowers(trio.totalReach)}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+          unique followers across all three
         </div>
       </div>
 
@@ -652,32 +674,34 @@ function TrioCard({
         </div>
       </div>
 
-      {/* Stats row */}
+      {/* New audience opportunity */}
       <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr',
+        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
         gap: 10, padding: '12px 14px', background: '#f8fafc',
         borderRadius: 4, border: '1px solid #f1f5f9', marginBottom: 12,
       }}>
-        <div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-faint)', marginBottom: 3 }}>
-            Combined reach
+        <div style={{ textAlign: 'left' }}>
+          <div style={{ fontSize: 10, color: 'var(--color-text-faint)', marginBottom: 3 }}>
+            New people for you
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600, color: 'var(--color-navy)' }}>
-            {formatFollowers(trio.totalReach)}
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--color-text-faint)' }}>
-            unique followers across all three
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: 'var(--color-navy)' }}>
+            +{formatFollowers(trio.newAudienceForUser ?? 0)}
           </div>
         </div>
-        <div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-faint)', marginBottom: 3 }}>
-            Shared by all three
+        <div style={{ textAlign: 'left' }}>
+          <div style={{ fontSize: 10, color: 'var(--color-text-faint)', marginBottom: 3 }}>
+            New for {(trio.matchA.displayName || trio.matchA.handle).split(' ')[0]}
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600, color: 'var(--color-navy)' }}>
-            {formatFollowers(trio.overlaps.threeWay)}
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: 'var(--color-navy)' }}>
+            +{formatFollowers(trio.newAudienceForA ?? 0)}
           </div>
-          <div style={{ fontSize: 10, color: 'var(--color-text-faint)' }}>
-            followers in common
+        </div>
+        <div style={{ textAlign: 'left' }}>
+          <div style={{ fontSize: 10, color: 'var(--color-text-faint)', marginBottom: 3 }}>
+            New for {(trio.matchB.displayName || trio.matchB.handle).split(' ')[0]}
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: 'var(--color-navy)' }}>
+            +{formatFollowers(trio.newAudienceForB ?? 0)}
           </div>
         </div>
       </div>
@@ -855,13 +879,30 @@ function PairCard({
             {rank}
           </span>
           <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-navy)' }}>
-            Collaboration #{rank}
+            You + {pair.match.displayName || pair.match.handle}
           </span>
         </div>
-        <div style={{ display: 'flex', gap: 2 }}>
+        <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
           {pair.signals.sizeMatch && <SignalBadge label="Similar size" />}
           {pair.signals.topicMatch && <SignalBadge label="Topic match" />}
           {pair.signals.geoMatch && <SignalBadge label="Same region" />}
+        </div>
+      </div>
+
+      {/* Combined reach — hero */}
+      <div style={{
+        textAlign: 'center', padding: '20px 16px', marginBottom: 16,
+        background: 'linear-gradient(135deg, #EBF2FD 0%, #f0f7ff 100%)',
+        borderRadius: 6, border: '1px solid #d6e4f5',
+      }}>
+        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-blue)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+          Combined audience
+        </div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 32, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+          {formatFollowers(pair.totalReach)}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+          unique followers together
         </div>
       </div>
 
@@ -887,25 +928,33 @@ function PairCard({
         </div>
       </div>
 
-      {/* Stats */}
+      {/* New audience opportunity */}
       <div style={{
         display: 'grid', gridTemplateColumns: '1fr 1fr',
         gap: 10, padding: '12px 14px', background: '#f8fafc',
         borderRadius: 4, border: '1px solid #f1f5f9', marginBottom: 12,
       }}>
-        <div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-faint)', marginBottom: 3 }}>Combined reach</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600, color: 'var(--color-navy)' }}>
-            {formatFollowers(pair.totalReach)}
+        <div style={{ textAlign: 'left' }}>
+          <div style={{ fontSize: 10, color: 'var(--color-text-faint)', marginBottom: 3 }}>
+            New people for you
           </div>
-          <div style={{ fontSize: 10, color: 'var(--color-text-faint)' }}>unique followers together</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: 'var(--color-navy)' }}>
+            +{formatFollowers(pair.newAudienceForUser ?? 0)}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--color-text-faint)' }}>
+            from {(pair.match.displayName || pair.match.handle).split(' ')[0]}
+          </div>
         </div>
-        <div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-faint)', marginBottom: 3 }}>Shared followers</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600, color: 'var(--color-navy)' }}>
-            {formatFollowers(pair.overlap)}
+        <div style={{ textAlign: 'left' }}>
+          <div style={{ fontSize: 10, color: 'var(--color-text-faint)', marginBottom: 3 }}>
+            New for {(pair.match.displayName || pair.match.handle).split(' ')[0]}
           </div>
-          <div style={{ fontSize: 10, color: 'var(--color-text-faint)' }}>followers in common</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: 'var(--color-navy)' }}>
+            +{formatFollowers(pair.newAudienceForMatch ?? 0)}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--color-text-faint)' }}>
+            from you
+          </div>
         </div>
       </div>
 

@@ -1114,9 +1114,9 @@ function ProportionalBar() {
   );
 }
 
-// ── Visualization: Rectangle Overlap ──────────────────────────────────────────
-// Three translucent colored rectangles that overlap like the reference image.
-// Where they overlap, colors blend naturally. Hover highlights a creator's rect.
+// ── Visualization: Rectangle Overlap (Premium) ───────────────────────────────
+// Three frosted-glass rectangles with color blending. Avatar photos in unique
+// zones. No buttons — the graph itself is the interface.
 
 function RectangleOverlap() {
   const total = TRIO_DATA.totalReach;
@@ -1126,27 +1126,29 @@ function RectangleOverlap() {
   const uniqueA = TRIO_DATA.matchA.size - TRIO_DATA.overlaps.userA - TRIO_DATA.overlaps.ab - TRIO_DATA.overlaps.threeWay;
   const uniqueB = TRIO_DATA.matchB.size - TRIO_DATA.overlaps.userB - TRIO_DATA.overlaps.ab - TRIO_DATA.overlaps.threeWay;
 
-  // Three rectangles positioned to overlap. Each creator gets a color.
-  // Layout: Jon (pink) bottom-left, Jim (blue) top-center, talia (cyan) right
+  // Three rectangles: Jon (pink) bottom-left, Jim (blue) top-center, talia (cyan) right
   const rects = [
     {
-      id: 'user', name: 'Jon', size: TRIO_DATA.user.size,
-      color: '#ec4899', bg: 'rgba(236, 72, 153, 0.35)',
+      id: 'user', name: 'Jon', handle: '@jonnelledge', size: TRIO_DATA.user.size,
+      color: '#ec4899', colorLight: '#fce7f3',
+      bg: 'rgba(236, 72, 153, 0.28)', bgGlass: 'rgba(255, 255, 255, 0.15)',
       x: 20, y: 120, w: 220, h: 200,
     },
     {
-      id: 'a', name: 'Jim', size: TRIO_DATA.matchA.size,
-      color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.35)',
+      id: 'a', name: 'Jim', handle: '@jim.londoncentric', size: TRIO_DATA.matchA.size,
+      color: '#3b82f6', colorLight: '#dbeafe',
+      bg: 'rgba(59, 130, 246, 0.28)', bgGlass: 'rgba(255, 255, 255, 0.15)',
       x: 100, y: 40, w: 220, h: 200,
     },
     {
-      id: 'b', name: 'talia', size: TRIO_DATA.matchB.size,
-      color: '#22d3ee', bg: 'rgba(34, 211, 238, 0.35)',
+      id: 'b', name: 'talia', handle: '@taliajane', size: TRIO_DATA.matchB.size,
+      color: '#06b6d4', colorLight: '#cffafe',
+      bg: 'rgba(6, 182, 212, 0.28)', bgGlass: 'rgba(255, 255, 255, 0.15)',
       x: 180, y: 120, w: 220, h: 200,
     },
   ];
 
-  // Compute overlap zones (rectangles intersections) for labeling
+  // Compute overlap zones
   const intersect = (r1: typeof rects[0], r2: typeof rects[0]) => {
     const x = Math.max(r1.x, r2.x);
     const y = Math.max(r1.y, r2.y);
@@ -1156,40 +1158,36 @@ function RectangleOverlap() {
     return null;
   };
 
-  const userRect = rects[0], aRect = rects[1], bRect = rects[2];
-  const userAZone = intersect(userRect, aRect);
-  const userBZone = intersect(userRect, bRect);
-  const abZone = intersect(aRect, bRect);
-
-  // Three-way intersection
+  const userAZone = intersect(rects[0], rects[1]);
+  const userBZone = intersect(rects[0], rects[2]);
+  const abZone = intersect(rects[1], rects[2]);
   const threeWayZone = (() => {
     if (!userAZone) return null;
-    const fakeRect = { ...bRect, id: 'b', name: 'b', size: 0, color: '', bg: '' };
-    const x = Math.max(userAZone.x, fakeRect.x);
-    const y = Math.max(userAZone.y, fakeRect.y);
-    const x2 = Math.min(userAZone.x + userAZone.w, fakeRect.x + fakeRect.w);
-    const y2 = Math.min(userAZone.y + userAZone.h, fakeRect.y + fakeRect.h);
+    const x = Math.max(userAZone.x, rects[2].x);
+    const y = Math.max(userAZone.y, rects[2].y);
+    const x2 = Math.min(userAZone.x + userAZone.w, rects[2].x + rects[2].w);
+    const y2 = Math.min(userAZone.y + userAZone.h, rects[2].y + rects[2].h);
     if (x2 > x && y2 > y) return { x, y, w: x2 - x, h: y2 - y, cx: (x + x2) / 2, cy: (y + y2) / 2 };
     return null;
   })();
 
-  // Zone data for labels
   const zones = [
-    { id: 'userA', label: `${fmt(TRIO_DATA.overlaps.userA)}`, zone: userAZone, owners: ['user', 'a'] },
-    { id: 'userB', label: `${fmt(TRIO_DATA.overlaps.userB)}`, zone: userBZone, owners: ['user', 'b'] },
-    { id: 'ab', label: `${fmt(TRIO_DATA.overlaps.ab)}`, zone: abZone, owners: ['a', 'b'] },
-    { id: 'center', label: `${fmt(TRIO_DATA.overlaps.threeWay)}`, zone: threeWayZone, owners: ['user', 'a', 'b'] },
+    { id: 'userA', value: TRIO_DATA.overlaps.userA, zone: userAZone, owners: ['user', 'a'] },
+    { id: 'userB', value: TRIO_DATA.overlaps.userB, zone: userBZone, owners: ['user', 'b'] },
+    { id: 'ab', value: TRIO_DATA.overlaps.ab, zone: abZone, owners: ['a', 'b'] },
+    { id: 'center', value: TRIO_DATA.overlaps.threeWay, zone: threeWayZone, owners: ['user', 'a', 'b'] },
   ];
 
-  const isRectActive = (rectId: string) => {
-    if (hovered === null) return true;
-    if (hovered === 'center') return true; // show all with center highlighted
-    return rectId === hovered;
+  // Avatar positions — in the unique area of each rect, away from overlaps
+  const avatarPositions: Record<string, { x: number; y: number }> = {
+    user: { x: 70, y: 260 },
+    a: { x: 160, y: 80 },
+    b: { x: 350, y: 260 },
   };
 
   const getSubline = () => {
-    if (hovered === null) return { text: 'Tap a name to explore', color: '#94a3b8' };
-    if (hovered === 'center') return { text: `${fmt(TRIO_DATA.overlaps.threeWay)} follow all three`, color: '#6d28d9' };
+    if (hovered === null) return { text: 'Tap to explore', color: '#94a3b8' };
+    if (hovered === 'center') return { text: `${fmt(TRIO_DATA.overlaps.threeWay)} follow all three`, color: '#7c3aed' };
     const rect = rects.find(r => r.id === hovered)!;
     const sharedCount = rect.id === 'user'
       ? TRIO_DATA.overlaps.userA + TRIO_DATA.overlaps.userB + TRIO_DATA.overlaps.threeWay
@@ -1204,158 +1202,183 @@ function RectangleOverlap() {
   return (
     <div>
       {/* Headline */}
-      <div style={{ textAlign: 'center', marginBottom: 4 }}>
+      <div style={{ textAlign: 'center', marginBottom: 6 }}>
         <div style={{
-          fontSize: 28, fontWeight: 700, fontFamily: 'var(--font-mono)',
-          color: 'var(--color-navy)', letterSpacing: '-0.02em',
+          fontSize: 26, fontWeight: 800, fontFamily: 'var(--font-mono)',
+          color: 'var(--color-navy)', letterSpacing: '-0.03em',
         }}>
-          Combined reach of {fmt(total)} unique followers
+          {fmt(total)} unique followers
         </div>
       </div>
 
       {/* Dynamic subline */}
       <div style={{
-        textAlign: 'center', marginBottom: 16, minHeight: 22,
+        textAlign: 'center', marginBottom: 20, minHeight: 20,
         fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 500,
         color: subline.color, transition: 'color 0.3s ease',
+        letterSpacing: '-0.01em',
       }}>
         {subline.text}
       </div>
 
-      {/* Rectangle overlap SVG */}
-      <svg
-        viewBox="0 0 420 360"
-        style={{ width: '100%', maxWidth: 480, display: 'block', margin: '0 auto', cursor: 'pointer' }}
+      {/* Rectangle overlap — HTML div approach for real backdrop-filter glass */}
+      <div
+        style={{
+          position: 'relative', width: '100%', maxWidth: 440, height: 340,
+          margin: '0 auto', cursor: 'pointer',
+        }}
         onMouseLeave={() => setHovered('center')}
       >
-        {/* Mix-blend-mode container */}
-        <g style={{ isolation: 'isolate' } as React.CSSProperties}>
-          {rects.map((rect) => {
-            const active = isRectActive(rect.id);
-            const isDirectHover = hovered === rect.id;
-            return (
-              <rect
-                key={rect.id}
-                x={rect.x} y={rect.y} width={rect.w} height={rect.h}
-                rx={16}
-                fill={rect.bg}
-                opacity={hovered === null || active ? 1 : 0.15}
-                style={{
-                  transition: 'opacity 0.4s ease',
-                  mixBlendMode: 'multiply',
-                  stroke: isDirectHover ? rect.color : 'transparent',
-                  strokeWidth: isDirectHover ? 2.5 : 0,
-                } as React.CSSProperties}
-                onMouseEnter={() => setHovered(rect.id)}
-                onClick={() => setHovered(hovered === rect.id ? 'center' : rect.id)}
-              />
-            );
-          })}
-        </g>
-
-        {/* Creator name + count labels in unique areas */}
+        {/* Three glass rectangles */}
         {rects.map((rect) => {
-          // Find the centroid of the unique-only area (approximate: center of rect, nudged away from overlaps)
-          const nudge = rect.id === 'user' ? { dx: -40, dy: 40 }
-            : rect.id === 'a' ? { dx: 0, dy: -40 }
-            : { dx: 40, dy: 40 };
-          const lx = rect.x + rect.w / 2 + nudge.dx;
-          const ly = rect.y + rect.h / 2 + nudge.dy;
-          const isActive = hovered === null || hovered === rect.id || hovered === 'center';
+          const isActive = hovered === null || hovered === 'center' || hovered === rect.id;
+          const isDirectHover = hovered === rect.id;
+          // Scale from SVG coords to container (440×340)
+          const scale = 440 / 420;
           return (
-            <g key={`label-${rect.id}`} style={{ pointerEvents: 'none' }}>
-              <text x={lx} y={ly - 8} textAnchor="middle" fontSize={13} fontWeight={700}
-                fill={rect.color} fontFamily="var(--font-mono)"
-                opacity={isActive ? 1 : 0.3}
-                style={{ transition: 'opacity 0.3s ease' }}
-              >
-                {rect.name}
-              </text>
-              <text x={lx} y={ly + 8} textAnchor="middle" fontSize={11} fontWeight={500}
-                fill={rect.color} fontFamily="var(--font-mono)"
-                opacity={isActive ? 0.7 : 0.2}
-                style={{ transition: 'opacity 0.3s ease' }}
-              >
-                {fmt(rect.size)}
-              </text>
-            </g>
+            <div
+              key={rect.id}
+              onMouseEnter={() => setHovered(rect.id)}
+              onClick={() => setHovered(hovered === rect.id ? 'center' : rect.id)}
+              style={{
+                position: 'absolute',
+                left: rect.x * scale,
+                top: (rect.y - 20) * scale,  // shift up since our container starts higher
+                width: rect.w * scale,
+                height: rect.h * scale,
+                borderRadius: 20,
+                background: rect.bg,
+                backdropFilter: 'blur(8px) saturate(1.5)',
+                WebkitBackdropFilter: 'blur(8px) saturate(1.5)',
+                border: isDirectHover
+                  ? `2px solid ${rect.color}`
+                  : '1px solid rgba(255,255,255,0.4)',
+                boxShadow: isDirectHover
+                  ? `0 8px 32px ${rect.bg}, inset 0 1px 0 rgba(255,255,255,0.3)`
+                  : 'inset 0 1px 0 rgba(255,255,255,0.25)',
+                opacity: isActive ? 1 : 0.2,
+                transition: 'opacity 0.4s ease, border 0.3s ease, box-shadow 0.3s ease',
+                mixBlendMode: 'multiply' as const,
+                zIndex: isDirectHover ? 3 : rect.id === 'a' ? 2 : 1,
+              }}
+            />
           );
         })}
 
-        {/* Overlap zone labels */}
+        {/* Avatars + name labels — positioned in each rect's unique area */}
+        {rects.map((rect) => {
+          const pos = avatarPositions[rect.id];
+          const scale = 440 / 420;
+          const ax = pos.x * scale;
+          const ay = (pos.y - 20) * scale;
+          const isActive = hovered === null || hovered === rect.id || hovered === 'center';
+          const isDirectHover = hovered === rect.id;
+          return (
+            <div
+              key={`avatar-${rect.id}`}
+              onMouseEnter={() => setHovered(rect.id)}
+              onClick={() => setHovered(hovered === rect.id ? 'center' : rect.id)}
+              style={{
+                position: 'absolute',
+                left: ax - 22, top: ay - 22,
+                width: 44, height: 44,
+                zIndex: 10,
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                opacity: isActive ? 1 : 0.25,
+                transition: 'opacity 0.3s ease, transform 0.3s ease',
+                transform: isDirectHover ? 'scale(1.1)' : 'scale(1)',
+              }}
+            >
+              {/* Avatar circle */}
+              <div style={{
+                width: 40, height: 40, borderRadius: '50%',
+                background: isDirectHover
+                  ? `linear-gradient(135deg, ${rect.color}, ${rect.colorLight})`
+                  : `linear-gradient(135deg, ${rect.colorLight}, #fff)`,
+                border: `2.5px solid ${isDirectHover ? rect.color : 'rgba(255,255,255,0.8)'}`,
+                boxShadow: isDirectHover
+                  ? `0 4px 16px ${rect.bg}`
+                  : '0 2px 8px rgba(0,0,0,0.08)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.3s ease',
+                flexShrink: 0,
+              }}>
+                <span style={{
+                  fontSize: 16, fontWeight: 800,
+                  color: isDirectHover ? '#fff' : rect.color,
+                  fontFamily: 'var(--font-mono)',
+                  transition: 'color 0.3s ease',
+                }}>
+                  {rect.name[0]}
+                </span>
+              </div>
+              {/* Name + count */}
+              <div style={{
+                marginTop: 4, textAlign: 'center', whiteSpace: 'nowrap',
+              }}>
+                <div style={{
+                  fontSize: 11, fontWeight: 700, color: rect.color,
+                  fontFamily: 'var(--font-mono)', letterSpacing: '-0.02em',
+                }}>
+                  {rect.name}
+                </div>
+                <div style={{
+                  fontSize: 9, fontWeight: 500, color: rect.color,
+                  fontFamily: 'var(--font-mono)', opacity: 0.6,
+                }}>
+                  {fmt(rect.size)}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Overlap zone number labels */}
         {zones.map((z) => {
           if (!z.zone) return null;
-          const isActive = hovered === null
-            || hovered === 'center'
-            || z.owners.includes(hovered);
-          // For center (three-way), show differently
+          const scale = 440 / 420;
           const isCenter = z.id === 'center';
+          const isActive = hovered === null || hovered === 'center' || z.owners.includes(hovered);
           return (
-            <g key={`zone-${z.id}`}
-              style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+            <div
+              key={`zone-${z.id}`}
               onMouseEnter={() => {
                 if (isCenter) setHovered('center');
                 else setHovered(z.owners[0]);
               }}
-              onClick={() => {
-                if (isCenter) setHovered('center');
-              }}
-            >
-              {/* Invisible hit area */}
-              <rect x={z.zone.x} y={z.zone.y} width={z.zone.w} height={z.zone.h}
-                fill="transparent" />
-              <text
-                x={z.zone.cx} y={z.zone.cy + 4}
-                textAnchor="middle" fontSize={isCenter ? 13 : 10}
-                fontWeight={isCenter ? 800 : 600}
-                fill={isCenter ? '#6d28d9' : '#475569'}
-                fontFamily="var(--font-mono)"
-                opacity={isActive ? 1 : 0.2}
-                style={{ transition: 'opacity 0.3s ease', pointerEvents: 'none' }}
-              >
-                {z.label}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-
-      {/* Account buttons */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-        {rects.map((rect) => {
-          const isHov = hovered === rect.id;
-          return (
-            <button
-              key={rect.id}
-              onMouseEnter={() => setHovered(rect.id)}
-              onMouseLeave={() => setHovered('center')}
-              onClick={() => setHovered(hovered === rect.id ? 'center' : rect.id)}
+              onClick={() => { if (isCenter) setHovered('center'); }}
               style={{
-                padding: '6px 16px', borderRadius: 20, border: 'none', cursor: 'pointer',
-                backgroundColor: isHov ? rect.color : '#f1f5f9',
-                color: isHov ? '#fff' : '#64748b',
-                fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)',
-                transition: 'all 0.3s ease',
+                position: 'absolute',
+                left: z.zone.cx * scale - (isCenter ? 28 : 20),
+                top: (z.zone.cy - 20) * scale - (isCenter ? 14 : 8),
+                width: isCenter ? 56 : 40,
+                textAlign: 'center',
+                zIndex: 10,
+                opacity: isActive ? 1 : 0.15,
+                transition: 'opacity 0.3s ease',
+                pointerEvents: 'auto' as const,
               }}
             >
-              {rect.name} · {fmt(rect.size)}
-            </button>
+              <div style={{
+                fontSize: isCenter ? 16 : 11,
+                fontWeight: isCenter ? 800 : 600,
+                color: isCenter ? '#7c3aed' : '#475569',
+                fontFamily: 'var(--font-mono)',
+                letterSpacing: '-0.02em',
+              }}>
+                {fmt(z.value)}
+              </div>
+              {isCenter && (
+                <div style={{
+                  fontSize: 8, fontWeight: 500, color: '#7c3aed',
+                  fontFamily: 'var(--font-mono)', opacity: 0.6, marginTop: 1,
+                }}>
+                  all three
+                </div>
+              )}
+            </div>
           );
         })}
-        <button
-          onMouseEnter={() => setHovered('center')}
-          onMouseLeave={() => setHovered('center')}
-          onClick={() => setHovered('center')}
-          style={{
-            padding: '6px 12px', borderRadius: 20, border: 'none', cursor: 'pointer',
-            backgroundColor: hovered === 'center' ? '#6d28d9' : '#f1f5f9',
-            color: hovered === 'center' ? '#fff' : '#64748b',
-            fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)',
-            transition: 'all 0.3s ease',
-          }}
-        >
-          All 3
-        </button>
       </div>
     </div>
   );

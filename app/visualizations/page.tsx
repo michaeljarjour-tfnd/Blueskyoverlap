@@ -373,18 +373,44 @@ function Galaxy() {
     return dot.owners.includes(hovered);
   };
 
-  const getInfo = () => {
-    if (hovered === null) return { text: `${fmt(total)} unique followers`, color: '#94a3b8' };
-    if (hovered === 'center') return { text: `${fmt(TRIO_DATA.overlaps.threeWay)} follow all three`, color: '#4f46e5' };
+  const getSubline = () => {
+    if (hovered === null) return { text: 'Hover to explore', color: '#94a3b8' };
+    if (hovered === 'center') return { text: `${fmt(TRIO_DATA.overlaps.threeWay)} follow all of you`, color: '#4f46e5' };
     const acc = accounts.find(a => a.id === hovered)!;
-    return { text: `${fmt(acc.size)} follow ${acc.name}`, color: acc.shade };
+    // Count how many of this person's followers are shared with at least one other
+    const sharedCount = acc.id === 'user'
+      ? TRIO_DATA.overlaps.userA + TRIO_DATA.overlaps.userB + TRIO_DATA.overlaps.threeWay
+      : acc.id === 'a'
+        ? TRIO_DATA.overlaps.userA + TRIO_DATA.overlaps.ab + TRIO_DATA.overlaps.threeWay
+        : TRIO_DATA.overlaps.userB + TRIO_DATA.overlaps.ab + TRIO_DATA.overlaps.threeWay;
+    return { text: `${fmt(acc.size)} follow ${acc.name} · ${fmt(sharedCount)} shared`, color: acc.shade };
   };
 
-  const info = getInfo();
+  const subline = getSubline();
 
   return (
     <div>
-      <svg viewBox="0 0 400 400" style={{ width: '100%', maxWidth: 440, display: 'block', margin: '0 auto' }}>
+      {/* Headline */}
+      <div style={{ textAlign: 'center', marginBottom: 4 }}>
+        <div style={{
+          fontSize: 28, fontWeight: 700, fontFamily: 'var(--font-mono)',
+          color: 'var(--color-navy)', letterSpacing: '-0.02em',
+        }}>
+          Combined reach of {fmt(total)} unique followers
+        </div>
+      </div>
+
+      {/* Dynamic subline */}
+      <div style={{
+        textAlign: 'center', marginBottom: 12, minHeight: 22,
+        fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 500,
+        color: subline.color,
+        transition: 'color 0.3s ease',
+      }}>
+        {subline.text}
+      </div>
+
+      <svg viewBox="0 0 400 400" style={{ width: '100%', maxWidth: 420, display: 'block', margin: '0 auto' }}>
         {/* All dots */}
         {allDots.map((dot, i) => {
           const active = isActive(dot);
@@ -399,18 +425,10 @@ function Galaxy() {
             />
           );
         })}
-
-        {/* Center label when hovered */}
-        {hovered === 'center' && (
-          <text x={cx} y={cy + 30} textAnchor="middle" fontSize={10} fontWeight={600}
-            fill="#4f46e5" fontFamily="var(--font-mono)">
-            {fmt(TRIO_DATA.overlaps.threeWay)}
-          </text>
-        )}
       </svg>
 
       {/* Account buttons */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
         {accounts.map((acc) => {
           const isHov = hovered === acc.id;
           return (
@@ -445,16 +463,6 @@ function Galaxy() {
         >
           All 3
         </button>
-      </div>
-
-      {/* Info line */}
-      <div style={{
-        textAlign: 'center', marginTop: 12,
-        fontSize: 14, fontFamily: 'var(--font-mono)', fontWeight: 600,
-        color: info.color, minHeight: 22,
-        transition: 'color 0.3s ease',
-      }}>
-        {info.text}
       </div>
     </div>
   );

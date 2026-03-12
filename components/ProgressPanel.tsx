@@ -236,14 +236,16 @@ export default function ProgressPanel({
       {timeEstimate != null && timeEstimate > 0 && pct < 95 && (
         <div
           style={{
-            marginTop: 12,
+            marginTop: 14,
             fontSize: 12,
             color: 'var(--color-text-faint)',
             fontFamily: 'var(--font-mono)',
-            textAlign: 'center',
           }}
         >
-          {formatTimeRemaining(timeEstimate)}
+          <div style={{ marginBottom: 2 }}>
+            Lots of followers and likes to count — this could take a moment.
+          </div>
+          <div>{formatTimeRemaining(timeEstimate)}</div>
         </div>
       )}
     </div>

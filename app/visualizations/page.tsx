@@ -1123,59 +1123,65 @@ function RectangleOverlap() {
   const f = 'var(--font-sans)';
 
   // ── Proportional sizing ──────────────────────────────────────────────
-  // Rectangle area ∝ follower count. We use sqrt to get side length.
-  // Normalize to a reasonable pixel range for a ~460px wide canvas.
-  const maxSide = 230;
+  // Rectangle area ∝ follower count. sqrt gives side length.
+  const maxSide = 210;
   const maxSize = Math.max(TRIO_DATA.user.size, TRIO_DATA.matchA.size, TRIO_DATA.matchB.size);
   const side = (n: number) => Math.round(maxSide * Math.sqrt(n / maxSize));
 
   const userW = side(TRIO_DATA.user.size);
-  const userH = Math.round(userW * 0.88);
+  const userH = Math.round(userW * 0.82);
   const aW = side(TRIO_DATA.matchA.size);
-  const aH = Math.round(aW * 0.88);
+  const aH = Math.round(aW * 0.82);
   const bW = side(TRIO_DATA.matchB.size);
-  const bH = Math.round(bW * 0.88);
+  const bH = Math.round(bW * 0.82);
 
-  // Position them so they overlap proportionally.
-  // Overlap amount ∝ pairwise overlap / smaller set size
-  const overlapFrac = (shared: number, s1: number, s2: number) =>
-    Math.min(0.7, Math.max(0.15, shared / Math.min(s1, s2)));
+  // ── Triangular layout centered on a shared overlap point ───────────
+  // All three rects converge toward a center point. The distance each
+  // rect's edge sits from center is proportional to its NON-overlap
+  // with the others. This guarantees a three-way intersection.
+  const canvasW = 460;
+  const canvasH = 360;
+  const cx = canvasW / 2;
+  const cy = canvasH / 2;
 
-  // Jon bottom-left, Jim top-center, talia right
-  // Jon–Jim: large overlap (31.4K of ~53K)
-  const userJimFrac = overlapFrac(
+  // Pairwise overlap fractions (of the smaller set)
+  const pairFrac = (shared: number, s1: number, s2: number) =>
+    Math.min(0.65, Math.max(0.08, shared / Math.min(s1, s2)));
+
+  const fUserA = pairFrac(
     TRIO_DATA.overlaps.userA + TRIO_DATA.overlaps.threeWay,
     TRIO_DATA.user.size, TRIO_DATA.matchA.size
   );
-  // Jon–talia: small overlap (2.5K of ~52K)
-  const userTaliaFrac = overlapFrac(
+  const fUserB = pairFrac(
     TRIO_DATA.overlaps.userB + TRIO_DATA.overlaps.threeWay,
     TRIO_DATA.user.size, TRIO_DATA.matchB.size
   );
-  // Jim–talia: small overlap (2.2K of ~52K)
-  const jimTaliaFrac = overlapFrac(
+  const fAB = pairFrac(
     TRIO_DATA.overlaps.ab + TRIO_DATA.overlaps.threeWay,
     TRIO_DATA.matchA.size, TRIO_DATA.matchB.size
   );
 
-  // Canvas dimensions
-  const canvasW = 460;
-  const canvasH = 340;
+  // Each rect is placed so its inner edge overlaps with the center.
+  // Higher overlap fraction → rect pushed further toward center.
+  // Jon: top-left. Jim: top-right. talia: bottom-center.
+  // The "pull toward center" = average of pairwise overlaps with other two.
+  const pullUser = (fUserA + fUserB) / 2;
+  const pullA = (fUserA + fAB) / 2;
+  const pullB = (fUserB + fAB) / 2;
 
-  // Place Jon (user) on the left
-  const userX = 0;
-  const userY = canvasH - userH;
+  // Spread controls how far apart the rects are (lower = more overlap)
+  const spread = 0.55;
 
-  // Place Jim (a) overlapping Jon from the top-right
-  const aX = userX + userW - Math.round(aW * userJimFrac);
-  const aY = 0;
+  // Place rects relative to center. Each is offset in a direction,
+  // then pulled back toward center proportionally.
+  const userX = Math.round(cx - userW * (0.5 + spread * (1 - pullUser)));
+  const userY = Math.round(cy - userH * (0.5 + spread * (1 - pullUser) * 0.6));
 
-  // Place talia (b) to the right, overlapping both
-  const bX = Math.max(
-    userX + userW - Math.round(bW * userTaliaFrac),
-    aX + aW - Math.round(bW * jimTaliaFrac)
-  );
-  const bY = canvasH - bH;
+  const aX = Math.round(cx - aW * (0.5 - spread * (1 - pullA)));
+  const aY = Math.round(cy - aH * (0.5 + spread * (1 - pullA) * 0.6));
+
+  const bX = Math.round(cx - bW * 0.5);
+  const bY = Math.round(cy - bH * (0.5 - spread * (1 - pullB)));
 
   const rects = [
     {
@@ -1324,16 +1330,16 @@ function RectangleOverlap() {
 
         {/* ── Avatar + name in each rect's unique zone ─────── */}
         {rects.map((rect) => {
-          // Position avatar in the corner of the rect farthest from center
-          const ax = rect.id === 'user' ? rect.x + 20
-            : rect.id === 'a' ? rect.x + rect.w - 20
-            : rect.x + rect.w - 20;
-          const ay = rect.id === 'a' ? rect.y + 24
-            : rect.y + rect.h - 24;
+          // Position avatar at the outer corner (farthest from canvas center)
+          const ax = rect.id === 'user' ? rect.x + 24
+            : rect.id === 'a' ? rect.x + rect.w - 24
+            : rect.x + rect.w / 2;
+          const ay = rect.id === 'b' ? rect.y + rect.h - 28
+            : rect.y + 28;
           const isActive = hovered === null || hovered === rect.id || hovered === 'center';
           const isHov = hovered === rect.id;
-          // Align text left for Jon, right for Jim/talia
-          const alignRight = rect.id !== 'user';
+          const alignRight = rect.id === 'a';
+          const alignCenter = rect.id === 'b';
 
           return (
             <div
@@ -1342,11 +1348,12 @@ function RectangleOverlap() {
               onClick={() => setHovered(hovered === rect.id ? 'center' : rect.id)}
               style={{
                 position: 'absolute',
-                left: alignRight ? ax - 90 : ax,
-                top: ay - 16,
+                left: alignCenter ? ax - 45 : alignRight ? ax - 90 : ax,
+                top: alignCenter ? ay - 4 : ay - 16,
                 zIndex: 10,
-                display: 'flex', alignItems: 'center', gap: 8,
-                flexDirection: alignRight ? 'row-reverse' : 'row',
+                display: 'flex', alignItems: alignCenter ? 'center' : 'center',
+                gap: alignCenter ? 0 : 8,
+                flexDirection: alignCenter ? 'column' : (alignRight ? 'row-reverse' : 'row'),
                 opacity: isActive ? 1 : 0.2,
                 transition: 'opacity 0.3s ease',
                 cursor: 'pointer',

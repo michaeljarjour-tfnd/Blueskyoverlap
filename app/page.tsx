@@ -237,16 +237,12 @@ function HomeInner() {
   const [fetchPhase, setFetchPhase] = useState<ChunkedFetchPhase | undefined>(undefined);
   const [timeEstimate, setTimeEstimate] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const fetchStartRef = useRef(0);
-  const dataPhaseStartRef = useRef(0);     // when real data fetching began
-  const dataPhaseStartPctRef = useRef(0);  // pct at that moment
 
   // ── SSE-based submit (Quick / Balanced) ──────────────────────────────────
 
   const handleSseSubmit = useCallback(
     async (handles: string[], speedTier: SpeedTier, ctrl: AbortController) => {
       try {
-        fetchStartRef.current = Date.now();
         const res = await fetch('/api/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -287,24 +283,20 @@ function HomeInner() {
                   followerProgress: event.followerProgress,
                   postProgress: event.postProgress,
                 });
-                // Time estimate for SSE mode — use follower progress when available
+                // Time estimate: (remaining followers) / ~400 followers per second
+                // Bluesky API returns 100 per page, ~250ms per page (100ms delay + ~150ms latency)
+                const FOLLOWERS_PER_SEC = 400;
                 if (event.pct >= 90) {
                   setTimeEstimate(null);
                 } else if (event.followerProgress) {
-                  // Use actual follower throughput (much more accurate than pct)
                   const entries = Object.values(event.followerProgress);
                   const fetched = entries.reduce((s, v) => s + Math.min(v.fetched, v.max), 0);
                   const total = entries.reduce((s, v) => s + v.max, 0);
-                  // Mark when the data phase starts (first real follower data)
-                  if (fetched > 0 && !dataPhaseStartRef.current) {
-                    dataPhaseStartRef.current = Date.now();
-                  }
-                  const dataElapsed = (Date.now() - dataPhaseStartRef.current) / 1000;
-                  if (fetched > 0 && dataElapsed > 3 && total > 0) {
-                    const rate = fetched / dataElapsed;
-                    // Followers are ~80% of the work; add ~20% buffer for engagement + compute
-                    const followerRemaining = Math.max(0, (total - fetched) / rate);
-                    setTimeEstimate(followerRemaining * 1.2);
+                  const remaining = Math.max(0, total - fetched);
+                  if (remaining > 0) {
+                    setTimeEstimate(remaining / FOLLOWERS_PER_SEC);
+                  } else {
+                    setTimeEstimate(null);
                   }
                 }
               } else if (event.type === 'result') {
@@ -375,7 +367,6 @@ function HomeInner() {
         }
         setProgress({ message: '', pct: 10, followerProgress: folProgress, postProgress });
 
-        fetchStartRef.current = Date.now();
         let totalFetchedSoFar = 0;
         const totalNeeded = profiles.reduce((s, p) => s + (p.followersCount ?? 0), 0);
 
@@ -401,17 +392,13 @@ function HomeInner() {
             folProgress[did] = { fetched: chunk.fetched, max: chunk.total || totalFollowers };
             totalFetchedSoFar = Object.values(folProgress).reduce((s, v) => s + v.fetched, 0);
 
-            // Time estimate — wait 5s for stable rate, add buffer for engagement phase
-            if (totalFetchedSoFar > 0 && !dataPhaseStartRef.current) {
-              dataPhaseStartRef.current = Date.now();
-            }
-            const dataElapsed = dataPhaseStartRef.current
-              ? (Date.now() - dataPhaseStartRef.current) / 1000
-              : 0;
-            if (totalFetchedSoFar > 0 && dataElapsed > 5) {
-              const rate = totalFetchedSoFar / dataElapsed;
-              const followerRemaining = Math.max(0, totalNeeded - totalFetchedSoFar) / rate;
-              setTimeEstimate(followerRemaining * 1.2); // +20% for engagement + compute
+            // Time estimate: remaining uncached followers / ~400 per second
+            const FOLLOWERS_PER_SEC = 400;
+            const remaining = Math.max(0, totalNeeded - totalFetchedSoFar);
+            if (remaining > 0) {
+              setTimeEstimate(remaining / FOLLOWERS_PER_SEC);
+            } else {
+              setTimeEstimate(null);
             }
 
             const overallPct = 10 + Math.floor((totalFetchedSoFar / Math.max(totalNeeded, 1)) * 60);
@@ -514,8 +501,6 @@ function HomeInner() {
       setResult(null);
       setErrorMsg(null);
       setFetchPhase(undefined);
-      dataPhaseStartRef.current = 0;
-      dataPhaseStartPctRef.current = 0;
       setTimeEstimate(null);
 
       if (speedTier === 'complete') {

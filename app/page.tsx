@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import AnalysisForm from '@/components/AnalysisForm';
 import ProgressPanel from '@/components/ProgressPanel';
 import ResultsSection from '@/components/ResultsSection';
@@ -226,7 +227,7 @@ async function fetchChunkWithRetry(
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function Home() {
+function HomeInner() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [progress, setProgress] = useState<ProgressState>({ message: '', pct: 0 });
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -506,6 +507,25 @@ export default function Home() {
     setTimeEstimate(null);
   };
 
+  // ── Autostart from URL params (?handles=a,b&autostart=quick) ────────────
+  const searchParams = useSearchParams();
+  const autostartedRef = useRef(false);
+
+  useEffect(() => {
+    if (autostartedRef.current) return;
+    const handlesParam = searchParams.get('handles');
+    const autostart = searchParams.get('autostart') as SpeedTier | null;
+    if (handlesParam && autostart) {
+      autostartedRef.current = true;
+      const handles = handlesParam.split(',').map(h => h.trim()).filter(Boolean);
+      if (handles.length > 0) {
+        const tier: SpeedTier = ['quick', 'balanced', 'complete'].includes(autostart) ? autostart : 'quick';
+        // Small delay to ensure component is fully mounted
+        setTimeout(() => handleSubmit(handles, tier), 100);
+      }
+    }
+  }, [searchParams, handleSubmit]);
+
   return (
     <main
       style={{
@@ -562,5 +582,13 @@ export default function Home() {
 
       <Footer />
     </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense>
+      <HomeInner />
+    </Suspense>
   );
 }

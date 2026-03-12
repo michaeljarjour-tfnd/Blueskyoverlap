@@ -5,18 +5,32 @@ import { formatFollowers } from '@/lib/analysis/interpret';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-interface PartnerMatch {
+interface MatchInfo {
   did: string;
   handle: string;
   displayName: string;
+  avatar?: string;
   geography?: string;
-  overlapCount: number;
-  jaccard: number;
+  followerCount: number;
+}
+
+interface TrioRecommendation {
+  matchA: MatchInfo;
+  matchB: MatchInfo;
+  overlaps: {
+    userA: number;
+    userB: number;
+    ab: number;
+    threeWay: number;
+  };
+  sizes: {
+    user: number;
+    a: number;
+    b: number;
+  };
+  totalReach: number;
+  trioScore: number;
   overlapLevel: 'high' | 'medium' | 'low';
-  newForYou: number;
-  newForThem: number;
-  theirFollowerCount: number;
-  compositeScore: number;
   signals: {
     sizeMatch: boolean;
     topicMatch: boolean;
@@ -29,26 +43,17 @@ interface APIResponse {
     did: string;
     handle: string;
     followerCount: number;
+    avatar?: string;
     sampleSize?: number;
   };
-  matches: PartnerMatch[];
+  trios: TrioRecommendation[];
   totalJournalists: number;
   comparedCount: number;
 }
 
 interface NoCacheResponse {
   error: 'no_cache';
-  user: {
-    did: string;
-    handle: string;
-    followerCount: number;
-  };
-}
-
-interface PartnerResults {
-  user: APIResponse['user'];
-  matches: PartnerMatch[];
-  comparedAgainst: number;
+  user: { did: string; handle: string; followerCount: number };
 }
 
 interface DirectoryStats {
@@ -59,20 +64,170 @@ interface DirectoryStats {
 
 type Phase = 'idle' | 'loading' | 'results' | 'error' | 'no-cache';
 
-// ── Overlap level styling ──────────────────────────────────────────────────
+// ── Topic clustering ────────────────────────────────────────────────────────
 
-const LEVEL_STYLES = {
-  high:   { label: 'High overlap',   color: 'var(--color-navy)', barColor: 'var(--color-navy)' },
-  medium: { label: 'Medium overlap', color: 'var(--color-blue)',  barColor: 'var(--color-blue)' },
-  low:    { label: 'Low overlap',    color: 'var(--color-text-faint)', barColor: '#cbd5e1' },
-} as const;
+const TOPIC_CLUSTERS: Record<string, string[]> = {
+  'Politics & Government': ['Politics', 'Government Accountability', 'Policy', 'National Security', 'Foreign Policy', 'Immigration', 'Labor', 'Criminal Justice', 'Inequality'],
+  'Tech & Science': ['Tech', 'Science', 'Internet Culture', 'Data Visualization', 'Games/Gaming'],
+  'Business & Finance': ['Finance/Economics', 'Business', 'Personal Finance', 'Real Estate', 'Careers', 'Energy', 'Construction'],
+  'Culture & Arts': ['Culture', 'Entertainment/Hollywood', 'Music', 'Film/Movies', 'Art', 'Books/Writing', 'Photography', 'Design', 'Fashion', 'Comedy', 'Gossip'],
+  'Health & Lifestyle': ['Health/Wellness', 'Mental Health', 'Lifestyle', 'Fitness', 'Self Help', 'Parenting', 'Family', 'Dating/Romance', 'Running'],
+  'Food & Travel': ['Food', 'Restaurants', 'Recipes', 'Bars', 'Travel', 'Things to do', 'Things to Do', 'Outdoors'],
+  'Environment': ['Climate/Environment', 'Agriculture', 'Animals', 'Weather'],
+  'Social Justice': ['Identity/Belonging', 'Gender', 'LGBTQIA', 'Activism', 'Human Rights', 'Faith/Religion'],
+  'Investigative': ['Investigative', 'Law/Legal Issues', 'Crime'],
+  'World & News': ['World', 'General News', 'Explanatory', 'History', 'Media/Power', 'Solutions Journalism', 'Positive News', 'Positive news'],
+  'Local News': ['Local', 'Local News', 'Local news', 'Urban planning', 'Transit/Transportation'],
+  'Sports': ['Sports'],
+  'Education': ['Education'],
+};
+
+/** Map raw directory topics to consolidated cluster names. */
+function consolidateTopics(rawTopics: string[]): string[] {
+  const clusters = new Set<string>();
+  for (const raw of rawTopics) {
+    let matched = false;
+    for (const [cluster, members] of Object.entries(TOPIC_CLUSTERS)) {
+      if (members.some(m => m.toLowerCase() === raw.toLowerCase())) {
+        clusters.add(cluster);
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) clusters.add(raw); // Keep unclustered topics as-is
+  }
+  return Array.from(clusters).sort();
+}
+
+// ── Geography consolidation (client-side, mirrors API logic) ────────────────
+
+function consolidateGeographies(rawGeos: string[]): string[] {
+  const regions = new Set<string>();
+  for (const raw of rawGeos) {
+    const region = consolidateGeo(raw);
+    if (region) regions.add(region);
+  }
+  return Array.from(regions).sort();
+}
+
+const US_STATE_REGIONS: Record<string, string> = {
+  'ny': 'USA — Northeast', 'nj': 'USA — Northeast', 'ct': 'USA — Northeast',
+  'ma': 'USA — Northeast', 'pa': 'USA — Northeast', 'ri': 'USA — Northeast',
+  'vt': 'USA — Northeast', 'nh': 'USA — Northeast', 'me': 'USA — Northeast',
+  'fl': 'USA — Southeast', 'ga': 'USA — Southeast', 'nc': 'USA — Southeast',
+  'sc': 'USA — Southeast', 'va': 'USA — Southeast', 'al': 'USA — Southeast',
+  'ms': 'USA — Southeast', 'tn': 'USA — Southeast', 'la': 'USA — Southeast',
+  'ar': 'USA — Southeast', 'ky': 'USA — Southeast', 'wv': 'USA — Southeast',
+  'il': 'USA — Midwest', 'oh': 'USA — Midwest', 'mi': 'USA — Midwest',
+  'in': 'USA — Midwest', 'wi': 'USA — Midwest', 'mn': 'USA — Midwest',
+  'ia': 'USA — Midwest', 'mo': 'USA — Midwest', 'ks': 'USA — Midwest',
+  'ne': 'USA — Midwest', 'nd': 'USA — Midwest', 'sd': 'USA — Midwest',
+  'tx': 'USA — Southwest', 'ok': 'USA — Southwest', 'nm': 'USA — Southwest',
+  'az': 'USA — Southwest',
+  'ca': 'USA — West', 'or': 'USA — West', 'wa': 'USA — West',
+  'co': 'USA — West', 'nv': 'USA — West', 'ut': 'USA — West',
+  'id': 'USA — West', 'mt': 'USA — West', 'wy': 'USA — West',
+  'hi': 'USA — West', 'ak': 'USA — West',
+  'dc': 'USA — DC/National', 'd.c.': 'USA — DC/National',
+};
+
+function consolidateGeo(raw: string): string {
+  const lower = raw.toLowerCase().trim();
+  if (lower.includes('national') && lower.includes('us')) return 'USA — National';
+  if (lower.includes('d.c.') || lower.includes('washington, dc')) return 'USA — DC/National';
+  const cityState = lower.match(/,\s*([a-z]{2})$/);
+  if (cityState) {
+    const region = US_STATE_REGIONS[cityState[1]];
+    if (region) return region;
+  }
+  const stateUS = lower.match(/^(.+?)\s*-\s*us$/);
+  if (stateUS) {
+    const stateAbbrs: Record<string, string> = {
+      'california': 'ca', 'new york': 'ny', 'texas': 'tx', 'florida': 'fl',
+      'illinois': 'il', 'pennsylvania': 'pa', 'ohio': 'oh', 'georgia': 'ga',
+      'north carolina': 'nc', 'michigan': 'mi', 'new jersey': 'nj',
+      'virginia': 'va', 'washington': 'wa', 'massachusetts': 'ma',
+      'arizona': 'az', 'indiana': 'in', 'tennessee': 'tn', 'missouri': 'mo',
+      'maryland': 'md', 'wisconsin': 'wi', 'colorado': 'co', 'minnesota': 'mn',
+      'alabama': 'al', 'louisiana': 'la', 'kentucky': 'ky', 'oregon': 'or',
+      'oklahoma': 'ok', 'connecticut': 'ct', 'iowa': 'ia', 'arkansas': 'ar',
+      'nevada': 'nv', 'mississippi': 'ms', 'kansas': 'ks', 'new mexico': 'nm',
+      'utah': 'ut', 'nebraska': 'ne', 'idaho': 'id', 'hawaii': 'hi',
+      'maine': 'me', 'montana': 'mt', 'rhode island': 'ri', 'delaware': 'de',
+      'south dakota': 'sd', 'north dakota': 'nd', 'alaska': 'ak',
+      'vermont': 'vt', 'wyoming': 'wy', 'west virginia': 'wv',
+      'south carolina': 'sc', 'new hampshire': 'nh',
+    };
+    const abbr = stateAbbrs[stateUS[1].trim()];
+    if (abbr && US_STATE_REGIONS[abbr]) return US_STATE_REGIONS[abbr];
+    return 'USA';
+  }
+  if (lower === 'international') return 'International';
+  if (lower.includes('united kingdom') || lower.includes('uk')) return 'United Kingdom';
+  if (lower.includes('canada')) return 'Canada';
+  if (lower.includes('australia')) return 'Australia';
+  if (lower.includes('france')) return 'France';
+  if (lower.includes('germany')) return 'Germany';
+  return raw;
+}
+
+/** Normalize user-typed geography to match our region format. */
+function normalizeUserGeo(input: string): string {
+  const lower = input.toLowerCase().trim();
+  if (!lower) return '';
+
+  // Common city/country synonyms → regions
+  const cityMap: Record<string, string> = {
+    'new york': 'USA — Northeast', 'nyc': 'USA — Northeast', 'manhattan': 'USA — Northeast',
+    'brooklyn': 'USA — Northeast', 'boston': 'USA — Northeast', 'philly': 'USA — Northeast',
+    'philadelphia': 'USA — Northeast', 'pittsburgh': 'USA — Northeast',
+    'dc': 'USA — DC/National', 'washington dc': 'USA — DC/National',
+    'washington d.c.': 'USA — DC/National', 'washington': 'USA — DC/National',
+    'la': 'USA — West', 'los angeles': 'USA — West', 'san francisco': 'USA — West',
+    'sf': 'USA — West', 'seattle': 'USA — West', 'portland': 'USA — West',
+    'san diego': 'USA — West', 'denver': 'USA — West', 'las vegas': 'USA — West',
+    'chicago': 'USA — Midwest', 'detroit': 'USA — Midwest', 'minneapolis': 'USA — Midwest',
+    'miami': 'USA — Southeast', 'atlanta': 'USA — Southeast', 'charlotte': 'USA — Southeast',
+    'nashville': 'USA — Southeast', 'raleigh': 'USA — Southeast',
+    'dallas': 'USA — Southwest', 'houston': 'USA — Southwest', 'austin': 'USA — Southwest',
+    'san antonio': 'USA — Southwest', 'phoenix': 'USA — Southwest',
+    'london': 'United Kingdom', 'uk': 'United Kingdom', 'england': 'United Kingdom',
+    'paris': 'France', 'berlin': 'Germany', 'munich': 'Germany',
+    'toronto': 'Canada', 'vancouver': 'Canada', 'montreal': 'Canada',
+    'sydney': 'Australia', 'melbourne': 'Australia',
+    'us': 'USA — National', 'usa': 'USA — National', 'united states': 'USA — National',
+    'america': 'USA — National',
+  };
+
+  if (cityMap[lower]) return cityMap[lower];
+
+  // Try state names
+  const stateAbbrs: Record<string, string> = {
+    'california': 'ca', 'new york state': 'ny', 'texas': 'tx', 'florida': 'fl',
+    'illinois': 'il', 'pennsylvania': 'pa', 'ohio': 'oh', 'georgia': 'ga',
+    'north carolina': 'nc', 'michigan': 'mi', 'new jersey': 'nj',
+    'virginia': 'va', 'massachusetts': 'ma', 'arizona': 'az',
+    'tennessee': 'tn', 'colorado': 'co', 'minnesota': 'mn',
+    'oregon': 'or', 'oklahoma': 'ok',
+  };
+  if (stateAbbrs[lower]) {
+    const region = US_STATE_REGIONS[stateAbbrs[lower]];
+    if (region) return region;
+  }
+
+  // Check if it's already a valid region
+  if (input.startsWith('USA —') || input === 'International') return input;
+
+  // Return as-is (the API will also try to normalize)
+  return input;
+}
 
 // ── Loading messages ────────────────────────────────────────────────────────
 
 const LOADING_MESSAGES = [
   'Cross-referencing audiences...',
   'Checking the rolodex...',
-  'Finding your best matches...',
+  'Finding your best collaborations...',
   'Scanning the directory...',
   'Crunching the numbers...',
 ];
@@ -81,9 +236,7 @@ function useRotatingMessage(active: boolean, interval = 2500): string {
   const [index, setIndex] = useState(0);
   useEffect(() => {
     if (!active) return;
-    const id = setInterval(() => {
-      setIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
-    }, interval);
+    const id = setInterval(() => setIndex((prev) => (prev + 1) % LOADING_MESSAGES.length), interval);
     return () => clearInterval(id);
   }, [active, interval]);
   return LOADING_MESSAGES[index];
@@ -93,43 +246,17 @@ function useRotatingMessage(active: boolean, interval = 2500): string {
 
 function Header() {
   return (
-    <div
-      style={{
-        marginBottom: 48,
-        paddingBottom: 32,
-        borderBottom: '1px solid var(--color-border)',
-      }}
-    >
+    <div style={{ marginBottom: 48, paddingBottom: 32, borderBottom: '1px solid var(--color-border)' }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/trustfnd-logo.svg"
-        alt="Trustfnd"
-        style={{ height: 22, width: 'auto', marginBottom: 20, display: 'block' }}
-      />
-      <h1
-        style={{
-          fontFamily: 'var(--font-sans)',
-          fontSize: 42,
-          fontWeight: 700,
-          color: 'var(--color-navy)',
-          lineHeight: 1.15,
-          letterSpacing: '-0.02em',
-          margin: '0 0 10px',
-        }}
-      >
-        Find Your Match
+      <img src="/trustfnd-logo.svg" alt="Trustfnd" style={{ height: 22, width: 'auto', marginBottom: 20, display: 'block' }} />
+      <h1 style={{
+        fontFamily: 'var(--font-sans)', fontSize: 42, fontWeight: 700,
+        color: 'var(--color-navy)', lineHeight: 1.15, letterSpacing: '-0.02em', margin: '0 0 10px',
+      }}>
+        Find Your Trio
       </h1>
-      <p
-        style={{
-          color: 'var(--color-text-muted)',
-          fontSize: 15,
-          maxWidth: 540,
-          lineHeight: 1.6,
-          margin: 0,
-        }}
-      >
-        See which journalists share your audience — and where the
-        biggest growth opportunities are.
+      <p style={{ color: 'var(--color-text-muted)', fontSize: 15, maxWidth: 540, lineHeight: 1.6, margin: 0 }}>
+        Discover three-way collaboration opportunities — journalists who share your audience and each other&apos;s.
       </p>
     </div>
   );
@@ -139,22 +266,8 @@ function Header() {
 
 function Footer() {
   return (
-    <footer
-      style={{
-        marginTop: 64,
-        paddingTop: 24,
-        borderTop: '1px solid var(--color-border)',
-        textAlign: 'left',
-      }}
-    >
-      <p
-        style={{
-          fontSize: 12,
-          color: 'var(--color-text-faint)',
-          margin: 0,
-          lineHeight: 1.6,
-        }}
-      >
+    <footer style={{ marginTop: 64, paddingTop: 24, borderTop: '1px solid var(--color-border)', textAlign: 'left' }}>
+      <p style={{ fontSize: 12, color: 'var(--color-text-faint)', margin: 0, lineHeight: 1.6 }}>
         Created by Trustfnd. Collaborative growth for independent journalism.
       </p>
     </footer>
@@ -165,151 +278,304 @@ function Footer() {
 
 function SignalBadge({ label }: { label: string }) {
   return (
-    <span
-      style={{
-        display: 'inline-block',
-        padding: '2px 7px',
-        borderRadius: 3,
-        fontSize: 10,
-        fontWeight: 500,
-        background: '#EBF2FD',
-        color: 'var(--color-blue)',
-        marginRight: 4,
-      }}
-    >
+    <span style={{
+      display: 'inline-block', padding: '2px 7px', borderRadius: 3,
+      fontSize: 10, fontWeight: 500, background: '#EBF2FD', color: 'var(--color-blue)', marginRight: 4,
+    }}>
       {label}
     </span>
   );
 }
 
-// ── Match card ──────────────────────────────────────────────────────────────
+// ── Venn Diagram ─────────────────────────────────────────────────────────────
 
-function MatchCard({ match, rank, userHandle }: {
-  match: PartnerMatch;
-  rank: number;
+const VENN_COLORS = {
+  user: { fill: '#1a365d', stroke: '#1a365d' },
+  a:    { fill: '#2563eb', stroke: '#2563eb' },
+  b:    { fill: '#059669', stroke: '#059669' },
+};
+
+function VennDiagram({
+  trio,
+  userHandle,
+  userAvatar,
+}: {
+  trio: TrioRecommendation;
   userHandle: string;
+  userAvatar?: string;
 }) {
-  const level = LEVEL_STYLES[match.overlapLevel];
-  const jaccardPct = (match.jaccard * 100).toFixed(1);
-  // Scale bar: 20% Jaccard = full bar (most overlaps are small)
-  const barWidth = Math.min((match.jaccard / 0.20) * 100, 100);
+  const { overlaps, sizes } = trio;
+
+  // Circle positions — equilateral triangle arrangement
+  const cx = { user: 150, a: 105, b: 195 };
+  const cy = { user: 88, a: 162, b: 162 };
+  const r = 68;
+
+  // First letter for labels
+  const initials = {
+    user: userHandle.charAt(0).toUpperCase(),
+    a: (trio.matchA.displayName || trio.matchA.handle).charAt(0).toUpperCase(),
+    b: (trio.matchB.displayName || trio.matchB.handle).charAt(0).toUpperCase(),
+  };
+
+  const avatars = {
+    user: userAvatar,
+    a: trio.matchA.avatar,
+    b: trio.matchB.avatar,
+  };
 
   return (
-    <div
-      style={{
-        background: '#fff',
-        border: '1px solid var(--color-border)',
-        borderRadius: 6,
-        padding: '20px 22px',
-        marginBottom: 12,
-        transition: 'border-color 0.15s',
-      }}
+    <svg viewBox="0 0 300 250" style={{ width: '100%', maxWidth: 320, margin: '0 auto', display: 'block' }}>
+      <defs>
+        {/* Clip paths for avatar images */}
+        {(['user', 'a', 'b'] as const).map(key => (
+          <clipPath key={key} id={`clip-${key}`}>
+            <circle cx={cx[key]} cy={cy[key]} r={r - 1} />
+          </clipPath>
+        ))}
+      </defs>
+
+      {/* Circle fills with transparency */}
+      {(['user', 'a', 'b'] as const).map(key => (
+        <circle
+          key={key}
+          cx={cx[key]}
+          cy={cy[key]}
+          r={r}
+          fill={VENN_COLORS[key].fill}
+          fillOpacity={0.12}
+          stroke={VENN_COLORS[key].stroke}
+          strokeWidth={2}
+          strokeOpacity={0.6}
+        />
+      ))}
+
+      {/* Avatar images or initials */}
+      {(['user', 'a', 'b'] as const).map(key => {
+        const avatar = avatars[key];
+        // Position labels outside the overlap areas
+        const labelCx = key === 'user' ? cx.user : key === 'a' ? cx.a - 22 : cx.b + 22;
+        const labelCy = key === 'user' ? cy.user - 26 : key === 'a' ? cy.a + 26 : cy.b + 26;
+
+        return avatar ? (
+          <g key={`avatar-${key}`}>
+            <clipPath id={`avatar-clip-${key}`}>
+              <circle cx={labelCx} cy={labelCy} r={16} />
+            </clipPath>
+            <image
+              href={avatar}
+              x={labelCx - 16} y={labelCy - 16}
+              width={32} height={32}
+              clipPath={`url(#avatar-clip-${key})`}
+              style={{ imageRendering: 'auto' }}
+            />
+            <circle cx={labelCx} cy={labelCy} r={16}
+              fill="none" stroke={VENN_COLORS[key].stroke} strokeWidth={2} />
+          </g>
+        ) : (
+          <g key={`initial-${key}`}>
+            <circle cx={labelCx} cy={labelCy} r={16}
+              fill={VENN_COLORS[key].fill} fillOpacity={0.15}
+              stroke={VENN_COLORS[key].stroke} strokeWidth={1.5} />
+            <text x={labelCx} y={labelCy + 1} textAnchor="middle" dominantBaseline="central"
+              fontSize={13} fontWeight={600} fill={VENN_COLORS[key].stroke}
+              fontFamily="var(--font-sans)">
+              {initials[key]}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Overlap labels */}
+      {/* User-A overlap (top-left intersection) */}
+      <text x={(cx.user + cx.a) / 2} y={(cy.user + cy.a) / 2 - 2}
+        textAnchor="middle" fontSize={11} fontWeight={600} fill="#1a365d"
+        fontFamily="var(--font-mono)">
+        {formatFollowers(overlaps.userA)}
+      </text>
+
+      {/* User-B overlap (top-right intersection) */}
+      <text x={(cx.user + cx.b) / 2} y={(cy.user + cy.b) / 2 - 2}
+        textAnchor="middle" fontSize={11} fontWeight={600} fill="#1a365d"
+        fontFamily="var(--font-mono)">
+        {formatFollowers(overlaps.userB)}
+      </text>
+
+      {/* A-B overlap (bottom intersection) */}
+      <text x={(cx.a + cx.b) / 2} y={(cy.a + cy.b) / 2 + 12}
+        textAnchor="middle" fontSize={11} fontWeight={600} fill="#1a365d"
+        fontFamily="var(--font-mono)">
+        {formatFollowers(overlaps.ab)}
+      </text>
+
+      {/* Three-way center */}
+      {overlaps.threeWay > 0 && (
+        <g>
+          <circle cx={150} cy={137} r={18}
+            fill="#fff" fillOpacity={0.85} stroke="var(--color-navy)" strokeWidth={1} />
+          <text x={150} y={137} textAnchor="middle" dominantBaseline="central"
+            fontSize={10} fontWeight={700} fill="var(--color-navy)"
+            fontFamily="var(--font-mono)">
+            {formatFollowers(overlaps.threeWay)}
+          </text>
+        </g>
+      )}
+
+      {/* Size labels under circles */}
+      <text x={cx.user} y={cy.user - 50} textAnchor="middle"
+        fontSize={10} fill="var(--color-text-faint)" fontFamily="var(--font-mono)">
+        {formatFollowers(sizes.user)}
+      </text>
+      <text x={cx.a - 28} y={cy.a + 50} textAnchor="middle"
+        fontSize={10} fill="var(--color-text-faint)" fontFamily="var(--font-mono)">
+        {formatFollowers(sizes.a)}
+      </text>
+      <text x={cx.b + 28} y={cy.b + 50} textAnchor="middle"
+        fontSize={10} fill="var(--color-text-faint)" fontFamily="var(--font-mono)">
+        {formatFollowers(sizes.b)}
+      </text>
+    </svg>
+  );
+}
+
+// ── Trio card ────────────────────────────────────────────────────────────────
+
+function TrioCard({
+  trio,
+  rank,
+  userHandle,
+  userAvatar,
+}: {
+  trio: TrioRecommendation;
+  rank: number;
+  userHandle: string;
+  userAvatar?: string;
+}) {
+  const handles = [userHandle, trio.matchA.handle, trio.matchB.handle];
+  const analysisUrl = `/?handles=${handles.map(h => encodeURIComponent(h)).join(',')}&autostart=quick`;
+
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid var(--color-border)',
+      borderRadius: 8, padding: '24px', marginBottom: 20,
+      transition: 'border-color 0.15s',
+    }}
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-blue)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
     >
-      {/* Name + level */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-faint)', fontWeight: 500, flexShrink: 0 }}>
-              #{rank}
-            </span>
-            <span style={{ fontWeight: 600, fontSize: 16, color: 'var(--color-navy)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {match.displayName || match.handle}
-            </span>
-          </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--color-text-faint)', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            @{match.handle}
-            {match.geography && (
-              <span style={{ marginLeft: 8, fontSize: 11 }}>· {match.geography}</span>
-            )}
-          </div>
-          {/* Match signals */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-            {match.signals.sizeMatch && <SignalBadge label="Similar size" />}
-            {match.signals.topicMatch && <SignalBadge label="Topic match" />}
-            {match.signals.geoMatch && <SignalBadge label="Same region" />}
-          </div>
-        </div>
-
-        {/* Level badge */}
-        <span style={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: level.color,
-          padding: '4px 10px',
-          borderRadius: 3,
-          background: match.overlapLevel === 'high' ? '#EBF2FD' : match.overlapLevel === 'medium' ? '#f0f4ff' : '#f8f9fa',
-          flexShrink: 0,
-          letterSpacing: '0.02em',
-        }}>
-          {level.label}
-        </span>
-      </div>
-
-      {/* Similarity bar */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-          <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-            Audience overlap
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600,
+            color: '#fff', background: 'var(--color-navy)',
+            width: 26, height: 26, borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {rank}
           </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600, color: level.color }}>
-            {jaccardPct}%
+          <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--color-navy)' }}>
+            Collaboration #{rank}
           </span>
         </div>
-        <div style={{ background: '#f1f5f9', borderRadius: 999, height: 5, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${barWidth}%`, background: level.barColor, borderRadius: 999, transition: 'width 0.4s ease' }} />
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--color-text-faint)', marginTop: 4 }}>
-          {match.overlapCount.toLocaleString()} shared followers
+        {/* Signals */}
+        <div style={{ display: 'flex', gap: 2 }}>
+          {trio.signals.sizeMatch && <SignalBadge label="Similar size" />}
+          {trio.signals.topicMatch && <SignalBadge label="Topic match" />}
+          {trio.signals.geoMatch && <SignalBadge label="Same region" />}
         </div>
       </div>
 
-      {/* New audience potential */}
+      {/* Venn diagram */}
+      <VennDiagram trio={trio} userHandle={userHandle} userAvatar={userAvatar} />
+
+      {/* Trio members */}
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: 10,
-        padding: '12px 14px',
-        background: '#f8fafc',
-        borderRadius: 4,
-        border: '1px solid #f1f5f9',
+        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12,
+        margin: '16px 0', textAlign: 'center',
+      }}>
+        {/* User */}
+        <div>
+          <div style={{
+            fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const,
+            letterSpacing: '0.08em', color: VENN_COLORS.user.stroke, marginBottom: 4,
+          }}>You</div>
+          <div style={{
+            fontSize: 13, fontWeight: 600, color: 'var(--color-navy)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            @{userHandle}
+          </div>
+        </div>
+        {/* Match A */}
+        <div>
+          <div style={{
+            fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const,
+            letterSpacing: '0.08em', color: VENN_COLORS.a.stroke, marginBottom: 4,
+          }}>Partner A</div>
+          <div style={{
+            fontSize: 13, fontWeight: 600, color: 'var(--color-navy)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {trio.matchA.displayName || `@${trio.matchA.handle}`}
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-faint)' }}>
+            @{trio.matchA.handle}
+          </div>
+        </div>
+        {/* Match B */}
+        <div>
+          <div style={{
+            fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const,
+            letterSpacing: '0.08em', color: VENN_COLORS.b.stroke, marginBottom: 4,
+          }}>Partner B</div>
+          <div style={{
+            fontSize: 13, fontWeight: 600, color: 'var(--color-navy)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {trio.matchB.displayName || `@${trio.matchB.handle}`}
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-faint)' }}>
+            @{trio.matchB.handle}
+          </div>
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr',
+        gap: 10, padding: '12px 14px', background: '#f8fafc',
+        borderRadius: 4, border: '1px solid #f1f5f9', marginBottom: 12,
       }}>
         <div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-faint)', marginBottom: 3, lineHeight: 1.3 }}>
-            New audience for you
+          <div style={{ fontSize: 11, color: 'var(--color-text-faint)', marginBottom: 3 }}>
+            Combined reach
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: 'var(--color-navy)' }}>
-            {formatFollowers(match.newForYou)}
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600, color: 'var(--color-navy)' }}>
+            {formatFollowers(trio.totalReach)}
           </div>
           <div style={{ fontSize: 10, color: 'var(--color-text-faint)' }}>
-            of their {formatFollowers(match.theirFollowerCount)} followers
+            unique followers across all three
           </div>
         </div>
         <div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-faint)', marginBottom: 3, lineHeight: 1.3 }}>
-            New audience for them
+          <div style={{ fontSize: 11, color: 'var(--color-text-faint)', marginBottom: 3 }}>
+            Shared by all three
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 600, color: 'var(--color-navy)' }}>
-            {formatFollowers(match.newForThem)}
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600, color: 'var(--color-navy)' }}>
+            {formatFollowers(trio.overlaps.threeWay)}
           </div>
           <div style={{ fontSize: 10, color: 'var(--color-text-faint)' }}>
-            of your followers
+            followers in common
           </div>
         </div>
       </div>
 
-      {/* Deep dive link */}
-      <div style={{ marginTop: 12, textAlign: 'right' }}>
-        <a
-          href={`/?handles=${encodeURIComponent(userHandle)},${encodeURIComponent(match.handle)}`}
-          style={{
-            fontSize: 12,
-            color: 'var(--color-blue)',
-            textDecoration: 'none',
-            fontWeight: 500,
-          }}
-        >
+      {/* Deep dive */}
+      <div style={{ textAlign: 'right' }}>
+        <a href={analysisUrl} style={{
+          fontSize: 13, color: 'var(--color-blue)', textDecoration: 'none', fontWeight: 500,
+        }}>
           Run full analysis →
         </a>
       </div>
@@ -317,76 +583,9 @@ function MatchCard({ match, rank, userHandle }: {
   );
 }
 
-// ── Results view ────────────────────────────────────────────────────────────
+// ── No cache view ───────────────────────────────────────────────────────────
 
-function ResultsView({
-  results,
-  onReset,
-}: {
-  results: PartnerResults;
-  onReset: () => void;
-}) {
-  return (
-    <div>
-      {/* Summary strip */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          padding: '12px 16px',
-          background: '#fff',
-          border: '1px solid var(--color-border)',
-          borderRadius: 6,
-          marginBottom: 20,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--color-navy)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontWeight: 500 }}>@{results.user.handle}</span>
-          <span style={{ padding: '2px 7px', borderRadius: 3, background: '#EBF2FD', color: 'var(--color-blue)', fontSize: 11, fontWeight: 600 }}>
-            {formatFollowers(results.user.followerCount)} followers
-          </span>
-          <span style={{ color: 'var(--color-text-faint)', fontSize: 11 }}>
-            · {results.comparedAgainst} journalists compared
-          </span>
-        </div>
-        <button onClick={onReset} className="btn-ghost" style={{ marginTop: 0 }}>
-          New Search
-        </button>
-      </div>
-
-      {/* Match list */}
-      {results.matches.length > 0 ? (
-        results.matches.map((match, i) => (
-          <MatchCard
-            key={match.did}
-            match={match}
-            rank={i + 1}
-            userHandle={results.user.handle}
-          />
-        ))
-      ) : (
-        <div style={{ background: '#fff', border: '1px solid var(--color-border)', borderRadius: 6, padding: '40px 24px', textAlign: 'center' }}>
-          <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-navy)', marginBottom: 8 }}>
-            No matches found yet
-          </div>
-          <p style={{ fontSize: 14, color: 'var(--color-text-muted)', maxWidth: 400, margin: '0 auto', lineHeight: 1.6 }}>
-            The directory is still growing — check back soon as more journalists are added.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Inline analysis trigger ─────────────────────────────────────────────────
-
-function NoCacheView({
-  user,
-  onReset,
-}: {
+function NoCacheView({ user, onReset }: {
   user: NoCacheResponse['user'] | null;
   onReset: () => void;
 }) {
@@ -400,32 +599,22 @@ function NoCacheView({
       </div>
       <p style={{ fontSize: 14, color: 'var(--color-text-muted)', maxWidth: 440, margin: '0 auto 8px', lineHeight: 1.6 }}>
         We found{' '}
-        {user ? (
-          <strong>@{user.handle}</strong>
-        ) : (
-          'your account'
-        )}
+        {user ? <strong>@{user.handle}</strong> : 'your account'}
         {followerCount > 0 && ` (${formatFollowers(followerCount)} followers)`}
         , but we haven&apos;t analyzed your followers yet.
       </p>
       <p style={{ fontSize: 13, color: 'var(--color-text-faint)', maxWidth: 440, margin: '0 auto 24px', lineHeight: 1.5 }}>
-        We need to fetch your followers first so we can compare them against our journalist directory. This takes about <strong>{estimateMinutes} minutes</strong>.
+        We need to fetch your followers first so we can find your best collaborations. This takes about <strong>{estimateMinutes} minutes</strong>.
       </p>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
         {user && (
           <a
             href={`/?handles=${encodeURIComponent(user.handle)}&autostart=quick`}
             style={{
-              display: 'inline-block',
-              padding: '12px 24px',
-              background: 'var(--color-navy)',
-              color: '#F8FFFF',
-              borderRadius: 4,
-              fontSize: 14,
-              fontWeight: 500,
-              textDecoration: 'none',
-              fontFamily: 'var(--font-sans)',
-              transition: 'background 0.15s',
+              display: 'inline-block', padding: '12px 24px',
+              background: 'var(--color-navy)', color: '#F8FFFF', borderRadius: 4,
+              fontSize: 14, fontWeight: 500, textDecoration: 'none',
+              fontFamily: 'var(--font-sans)', transition: 'background 0.15s',
             }}
             onMouseEnter={(e) => { (e.target as HTMLElement).style.background = 'var(--color-blue)'; }}
             onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'var(--color-navy)'; }}
@@ -433,73 +622,60 @@ function NoCacheView({
             Start Analysis (~{estimateMinutes} min)
           </a>
         )}
-        <button onClick={onReset} className="btn-ghost">
-          Try another handle
-        </button>
+        <button onClick={onReset} className="btn-ghost">Try another handle</button>
       </div>
     </div>
   );
 }
 
-// ── Single select with custom option ─────────────────────────────────────────
+// ── Results view ────────────────────────────────────────────────────────────
 
-function ComboSelect({
-  label,
-  options,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  options: string[];
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
+function ResultsView({ user, trios, comparedCount, onReset }: {
+  user: APIResponse['user'];
+  trios: TrioRecommendation[];
+  comparedCount: number;
+  onReset: () => void;
 }) {
-  const [isCustom, setIsCustom] = useState(false);
-
   return (
-    <div className="input-group" style={{ marginBottom: 0 }}>
-      <label>{label}</label>
-      {!isCustom ? (
-        <select
-          className="handle-input"
-          value={value}
-          onChange={(e) => {
-            if (e.target.value === '__custom__') {
-              setIsCustom(true);
-              onChange('');
-            } else {
-              onChange(e.target.value);
-            }
-          }}
-          style={{ cursor: 'pointer' }}
-        >
-          <option value="">{placeholder}</option>
-          {options.map((opt) => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
-          <option value="__custom__">+ Add new…</option>
-        </select>
-      ) : (
-        <div style={{ display: 'flex', gap: 6 }}>
-          <input
-            className="handle-input"
-            type="text"
-            placeholder="Type your own…"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            autoFocus
-            style={{ flex: 1 }}
+    <div>
+      {/* Summary strip */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 12, padding: '12px 16px', background: '#fff',
+        border: '1px solid var(--color-border)', borderRadius: 6,
+        marginBottom: 20, flexWrap: 'wrap',
+      }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--color-navy)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontWeight: 500 }}>@{user.handle}</span>
+          <span style={{ padding: '2px 7px', borderRadius: 3, background: '#EBF2FD', color: 'var(--color-blue)', fontSize: 11, fontWeight: 600 }}>
+            {formatFollowers(user.followerCount)} followers
+          </span>
+          <span style={{ color: 'var(--color-text-faint)', fontSize: 11 }}>
+            · {comparedCount} journalists compared
+          </span>
+        </div>
+        <button onClick={onReset} className="btn-ghost" style={{ marginTop: 0 }}>New Search</button>
+      </div>
+
+      {/* Trio cards */}
+      {trios.length > 0 ? (
+        trios.map((trio, i) => (
+          <TrioCard
+            key={`${trio.matchA.did}-${trio.matchB.did}`}
+            trio={trio}
+            rank={i + 1}
+            userHandle={user.handle}
+            userAvatar={user.avatar}
           />
-          <button
-            type="button"
-            onClick={() => { setIsCustom(false); onChange(''); }}
-            className="btn-ghost"
-            style={{ padding: '6px 10px', fontSize: 12, marginTop: 0 }}
-          >
-            ✕
-          </button>
+        ))
+      ) : (
+        <div style={{ background: '#fff', border: '1px solid var(--color-border)', borderRadius: 6, padding: '40px 24px', textAlign: 'center' }}>
+          <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-navy)', marginBottom: 8 }}>
+            No collaborations found yet
+          </div>
+          <p style={{ fontSize: 14, color: 'var(--color-text-muted)', maxWidth: 400, margin: '0 auto', lineHeight: 1.6 }}>
+            The directory is still growing — check back soon as more journalists are added.
+          </p>
         </div>
       )}
     </div>
@@ -508,11 +684,7 @@ function ComboSelect({
 
 // ── Multi-select topic picker ────────────────────────────────────────────────
 
-function TopicMultiSelect({
-  options,
-  selected,
-  onChange,
-}: {
+function TopicMultiSelect({ options, selected, onChange }: {
   options: string[];
   selected: string[];
   onChange: (v: string[]) => void;
@@ -521,18 +693,12 @@ function TopicMultiSelect({
   const [customValue, setCustomValue] = useState('');
 
   const toggleTopic = (topic: string) => {
-    if (selected.includes(topic)) {
-      onChange(selected.filter((t) => t !== topic));
-    } else {
-      onChange([...selected, topic]);
-    }
+    onChange(selected.includes(topic) ? selected.filter(t => t !== topic) : [...selected, topic]);
   };
 
   const addCustom = () => {
     const trimmed = customValue.trim();
-    if (trimmed && !selected.includes(trimmed)) {
-      onChange([...selected, trimmed]);
-    }
+    if (trimmed && !selected.includes(trimmed)) onChange([...selected, trimmed]);
     setCustomValue('');
     setIsAdding(false);
   };
@@ -541,107 +707,95 @@ function TopicMultiSelect({
     <div className="input-group" style={{ marginBottom: 0 }}>
       <label>Your topics</label>
       <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 6,
-        padding: '10px 12px',
-        border: '1px solid var(--color-border)',
-        borderRadius: 4,
-        background: '#fff',
-        minHeight: 40,
+        display: 'flex', flexWrap: 'wrap', gap: 6,
+        padding: '10px 12px', border: '1px solid var(--color-border)',
+        borderRadius: 4, background: '#fff', minHeight: 40,
       }}>
         {options.map((topic) => {
           const active = selected.includes(topic);
           return (
-            <button
-              key={topic}
-              type="button"
-              onClick={() => toggleTopic(topic)}
+            <button key={topic} type="button" onClick={() => toggleTopic(topic)}
               style={{
-                display: 'inline-block',
-                padding: '4px 10px',
-                borderRadius: 3,
-                fontSize: 12,
-                fontWeight: 500,
-                border: '1px solid',
+                display: 'inline-block', padding: '4px 10px', borderRadius: 3,
+                fontSize: 12, fontWeight: 500, border: '1px solid',
                 borderColor: active ? 'var(--color-blue)' : 'var(--color-border)',
                 background: active ? '#EBF2FD' : '#fff',
                 color: active ? 'var(--color-blue)' : 'var(--color-text-muted)',
-                cursor: 'pointer',
-                transition: 'all 0.1s',
-                fontFamily: 'var(--font-sans)',
-              }}
-            >
+                cursor: 'pointer', transition: 'all 0.1s', fontFamily: 'var(--font-sans)',
+              }}>
               {active && '✓ '}{topic}
             </button>
           );
         })}
-        {/* Custom topics that aren't in the predefined list */}
-        {selected.filter((t) => !options.includes(t)).map((topic) => (
-          <button
-            key={topic}
-            type="button"
-            onClick={() => toggleTopic(topic)}
+        {selected.filter(t => !options.includes(t)).map(topic => (
+          <button key={topic} type="button" onClick={() => toggleTopic(topic)}
             style={{
-              display: 'inline-block',
-              padding: '4px 10px',
-              borderRadius: 3,
-              fontSize: 12,
-              fontWeight: 500,
-              border: '1px solid var(--color-blue)',
-              background: '#EBF2FD',
-              color: 'var(--color-blue)',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-sans)',
-            }}
-          >
+              display: 'inline-block', padding: '4px 10px', borderRadius: 3,
+              fontSize: 12, fontWeight: 500, border: '1px solid var(--color-blue)',
+              background: '#EBF2FD', color: 'var(--color-blue)',
+              cursor: 'pointer', fontFamily: 'var(--font-sans)',
+            }}>
             ✓ {topic}
           </button>
         ))}
-        {/* Add custom button / input */}
         {!isAdding ? (
-          <button
-            type="button"
-            onClick={() => setIsAdding(true)}
+          <button type="button" onClick={() => setIsAdding(true)}
             style={{
-              display: 'inline-block',
-              padding: '4px 10px',
-              borderRadius: 3,
-              fontSize: 12,
-              fontWeight: 500,
-              border: '1px dashed var(--color-border)',
-              background: 'transparent',
-              color: 'var(--color-text-faint)',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-sans)',
-            }}
-          >
+              display: 'inline-block', padding: '4px 10px', borderRadius: 3,
+              fontSize: 12, fontWeight: 500, border: '1px dashed var(--color-border)',
+              background: 'transparent', color: 'var(--color-text-faint)',
+              cursor: 'pointer', fontFamily: 'var(--font-sans)',
+            }}>
             + Add new
           </button>
         ) : (
-          <input
-            type="text"
-            value={customValue}
+          <input type="text" value={customValue}
             onChange={(e) => setCustomValue(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') { e.preventDefault(); addCustom(); }
               if (e.key === 'Escape') { setIsAdding(false); setCustomValue(''); }
             }}
-            onBlur={addCustom}
-            autoFocus
-            placeholder="Type topic…"
+            onBlur={addCustom} autoFocus placeholder="Type topic…"
             style={{
-              width: 110,
-              padding: '4px 8px',
-              borderRadius: 3,
-              fontSize: 12,
-              border: '1px solid var(--color-blue)',
-              outline: 'none',
-              fontFamily: 'var(--font-sans)',
+              width: 110, padding: '4px 8px', borderRadius: 3, fontSize: 12,
+              border: '1px solid var(--color-blue)', outline: 'none', fontFamily: 'var(--font-sans)',
             }}
           />
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Single select with custom option ─────────────────────────────────────────
+
+function ComboSelect({ label, options, value, onChange, placeholder }: {
+  label: string; options: string[]; value: string;
+  onChange: (v: string) => void; placeholder: string;
+}) {
+  const [isCustom, setIsCustom] = useState(false);
+  return (
+    <div className="input-group" style={{ marginBottom: 0 }}>
+      <label>{label}</label>
+      {!isCustom ? (
+        <select className="handle-input" value={value}
+          onChange={(e) => {
+            if (e.target.value === '__custom__') { setIsCustom(true); onChange(''); }
+            else onChange(e.target.value);
+          }}
+          style={{ cursor: 'pointer' }}>
+          <option value="">{placeholder}</option>
+          {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+          <option value="__custom__">+ Add new…</option>
+        </select>
+      ) : (
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input className="handle-input" type="text" placeholder="Type your own…"
+            value={value} onChange={(e) => onChange(e.target.value)} autoFocus style={{ flex: 1 }} />
+          <button type="button" onClick={() => { setIsCustom(false); onChange(''); }}
+            className="btn-ghost" style={{ padding: '6px 10px', fontSize: 12, marginTop: 0 }}>✕</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -655,90 +809,81 @@ export default function PartnersPage() {
   const [selectedGeo, setSelectedGeo] = useState('');
   const [topics, setTopics] = useState<string[]>([]);
   const [geographies, setGeographies] = useState<string[]>([]);
-  const [results, setResults] = useState<PartnerResults | null>(null);
+  const [apiResult, setApiResult] = useState<APIResponse | null>(null);
   const [noCacheUser, setNoCacheUser] = useState<NoCacheResponse['user'] | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const loadingMessage = useRotatingMessage(phase === 'loading');
 
-  // Fetch directory stats for dropdowns
   useEffect(() => {
     fetch('/api/directory?stats=true')
-      .then((r) => r.json())
+      .then(r => r.json())
       .then((data: DirectoryStats) => {
-        if (data.topics?.length) setTopics(data.topics.sort());
-        if (data.geographies?.length) setGeographies(data.geographies.sort());
+        // Consolidate topics into broad categories
+        if (data.topics?.length) {
+          const consolidated = consolidateTopics(data.topics);
+          setTopics(consolidated);
+        }
+        // Consolidate geographies into regions
+        if (data.geographies?.length) {
+          const consolidated = consolidateGeographies(data.geographies);
+          setGeographies(consolidated);
+        }
       })
       .catch(() => {});
   }, []);
 
   const cleanHandle = (input: string): string => {
     const trimmed = input.trim().replace(/^@/, '');
-    const profileMatch = trimmed.match(/bsky\.app\/profile\/([^/?#]+)/);
-    if (profileMatch) return profileMatch[1];
-    return trimmed;
+    const m = trimmed.match(/bsky\.app\/profile\/([^/?#]+)/);
+    return m ? m[1] : trimmed;
   };
 
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      const clean = cleanHandle(handle);
-      if (!clean) return;
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = cleanHandle(handle);
+    if (!clean) return;
 
-      abortRef.current?.abort();
-      const ctrl = new AbortController();
-      abortRef.current = ctrl;
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
 
-      setPhase('loading');
-      setResults(null);
-      setNoCacheUser(null);
-      setErrorMsg(null);
+    setPhase('loading');
+    setApiResult(null);
+    setNoCacheUser(null);
+    setErrorMsg(null);
 
-      try {
-        const params = new URLSearchParams({ handle: clean, limit: '30' });
-        if (selectedTopics.length > 0) params.set('topics', selectedTopics.join(','));
-        if (selectedGeo) params.set('geography', selectedGeo);
+    try {
+      const params = new URLSearchParams({ handle: clean, limit: '3' });
+      if (selectedTopics.length > 0) params.set('topics', selectedTopics.join(','));
+      if (selectedGeo) params.set('geography', selectedGeo);
 
-        const res = await fetch(`/api/partners?${params.toString()}`, {
-          signal: ctrl.signal,
-        });
+      const res = await fetch(`/api/partners?${params}`, { signal: ctrl.signal });
 
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-
-          if ((body as NoCacheResponse).error === 'no_cache') {
-            setNoCacheUser((body as NoCacheResponse).user || null);
-            setPhase('no-cache');
-            return;
-          }
-
-          const msg = (body as { error?: string }).error ?? res.statusText;
-          if (msg.toLowerCase().includes('not found')) {
-            throw new Error(`Could not find Bluesky account: ${clean}`);
-          }
-          throw new Error(msg);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if ((body as NoCacheResponse).error === 'no_cache') {
+          setNoCacheUser((body as NoCacheResponse).user || null);
+          setPhase('no-cache');
+          return;
         }
-
-        const data = (await res.json()) as APIResponse;
-        setResults({
-          user: data.user,
-          matches: data.matches,
-          comparedAgainst: data.comparedCount,
-        });
-        setPhase('results');
-      } catch (err) {
-        if ((err as Error).name === 'AbortError') return;
-        setErrorMsg((err as Error).message ?? 'Something went wrong');
-        setPhase('error');
+        const msg = (body as { error?: string }).error ?? res.statusText;
+        throw new Error(msg.toLowerCase().includes('not found') ? `Could not find Bluesky account: ${clean}` : msg);
       }
-    },
-    [handle, selectedTopics, selectedGeo]
-  );
+
+      setApiResult(await res.json() as APIResponse);
+      setPhase('results');
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
+      setErrorMsg((err as Error).message ?? 'Something went wrong');
+      setPhase('error');
+    }
+  }, [handle, selectedTopics, selectedGeo]);
 
   const handleReset = () => {
     abortRef.current?.abort();
     setPhase('idle');
-    setResults(null);
+    setApiResult(null);
     setNoCacheUser(null);
     setErrorMsg(null);
   };
@@ -747,115 +892,75 @@ export default function PartnersPage() {
     <main style={{ maxWidth: 760, margin: '0 auto', padding: '32px 20px 64px' }}>
       <Header />
 
-      {/* ── Input form ─────────────────────────────────────────────────────── */}
       {phase === 'idle' && (
         <form onSubmit={handleSubmit} className="card">
           <h2>Who are you?</h2>
-
           <div className="input-group">
             <label>Your Bluesky handle</label>
-            <input
-              className="handle-input"
-              type="text"
-              placeholder="e.g. yourname.bsky.social"
-              value={handle}
-              onChange={(e) => setHandle(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-            />
+            <input className="handle-input" type="text" placeholder="e.g. yourname.bsky.social"
+              value={handle} onChange={e => setHandle(e.target.value)}
+              autoComplete="off" spellCheck={false} />
           </div>
-
-          <p className="tip">
-            Paste your handle or a full Bluesky profile URL.
-          </p>
+          <p className="tip">Paste your handle or a full Bluesky profile URL.</p>
 
           {(topics.length > 0 || geographies.length > 0) && (
             <>
               <hr className="divider" />
-              <p style={{
-                fontSize: 13,
-                color: 'var(--color-text-muted)',
-                margin: '0 0 14px',
-                lineHeight: 1.5,
-              }}>
+              <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '0 0 14px', lineHeight: 1.5 }}>
                 Add your topic and location to improve your matches.
               </p>
-
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {topics.length > 0 && (
-                  <TopicMultiSelect
-                    options={topics}
-                    selected={selectedTopics}
-                    onChange={setSelectedTopics}
-                  />
+                  <TopicMultiSelect options={topics} selected={selectedTopics} onChange={setSelectedTopics} />
                 )}
                 {geographies.length > 0 && (
-                  <ComboSelect
-                    label="Your location"
-                    options={geographies}
+                  <ComboSelect label="Your location" options={geographies}
                     value={selectedGeo}
-                    onChange={setSelectedGeo}
-                    placeholder="Select location…"
-                  />
+                    onChange={(v) => setSelectedGeo(normalizeUserGeo(v))}
+                    placeholder="Select location…" />
                 )}
               </div>
             </>
           )}
 
           <button type="submit" className="btn" disabled={!handle.trim()} style={{ marginTop: 20 }}>
-            Find Matches
+            Find Collaborations
           </button>
         </form>
       )}
 
-      {/* ── Loading ────────────────────────────────────────────────────────── */}
       {phase === 'loading' && (
         <div style={{ background: '#fff', border: '1px solid var(--color-border)', borderRadius: 6, padding: '48px 32px', textAlign: 'center' }}>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 20 }}>
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                style={{
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: 'var(--color-blue)',
-                  animation: `pulse-dot 1.2s ease-in-out ${i * 0.2}s infinite`,
-                }}
-              />
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{
+                width: 8, height: 8, borderRadius: '50%', background: 'var(--color-blue)',
+                animation: `pulse-dot 1.2s ease-in-out ${i * 0.2}s infinite`,
+              }} />
             ))}
           </div>
-          <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-navy)', marginBottom: 6 }}>
-            {loadingMessage}
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-faint)', margin: 0 }}>
-            This usually takes a few seconds
-          </p>
-          <style>{`
-            @keyframes pulse-dot {
-              0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-              40% { transform: scale(1); opacity: 1; }
-            }
-          `}</style>
+          <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-navy)', marginBottom: 6 }}>{loadingMessage}</div>
+          <p style={{ fontSize: 13, color: 'var(--color-text-faint)', margin: 0 }}>This usually takes a few seconds</p>
+          <style>{`@keyframes pulse-dot { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }`}</style>
         </div>
       )}
 
-      {/* ── No cached followers ────────────────────────────────────────────── */}
-      {phase === 'no-cache' && (
-        <NoCacheView user={noCacheUser} onReset={handleReset} />
-      )}
+      {phase === 'no-cache' && <NoCacheView user={noCacheUser} onReset={handleReset} />}
 
-      {/* ── Error ──────────────────────────────────────────────────────────── */}
       {phase === 'error' && (
         <div className="alert alert-error">
           <strong>Error:</strong> {errorMsg}
-          <div style={{ marginTop: 12 }}>
-            <button onClick={handleReset} className="btn-ghost">Try again</button>
-          </div>
+          <div style={{ marginTop: 12 }}><button onClick={handleReset} className="btn-ghost">Try again</button></div>
         </div>
       )}
 
-      {/* ── Results ────────────────────────────────────────────────────────── */}
-      {phase === 'results' && results && (
-        <ResultsView results={results} onReset={handleReset} />
+      {phase === 'results' && apiResult && (
+        <ResultsView
+          user={apiResult.user}
+          trios={apiResult.trios}
+          comparedCount={apiResult.comparedCount}
+          onReset={handleReset}
+        />
       )}
 
       <Footer />

@@ -136,6 +136,339 @@ function ParticleDots() {
   );
 }
 
+// ── Visualization 1b: Particle Dots (Structured) ─────────────────────────────
+// Clearer version: dots arranged in distinct labeled zones with visible boundaries
+
+function ParticleDotsStructured() {
+  const total = TRIO_DATA.totalReach;
+
+  const uniqueUser = TRIO_DATA.user.size - TRIO_DATA.overlaps.userA - TRIO_DATA.overlaps.userB - TRIO_DATA.overlaps.threeWay;
+  const uniqueA = TRIO_DATA.matchA.size - TRIO_DATA.overlaps.userA - TRIO_DATA.overlaps.ab - TRIO_DATA.overlaps.threeWay;
+  const uniqueB = TRIO_DATA.matchB.size - TRIO_DATA.overlaps.userB - TRIO_DATA.overlaps.ab - TRIO_DATA.overlaps.threeWay;
+
+  // Zones: each has a center, radius, color, label, and dot count
+  const dotScale = 500 / total;
+  const zones = [
+    { id: 'user', label: 'Jon only', count: Math.round(uniqueUser * dotScale), cx: 100, cy: 90, spread: 52, color: COLORS.user, value: uniqueUser },
+    { id: 'a', label: 'Jim only', count: Math.round(uniqueA * dotScale), cx: 80, cy: 250, spread: 38, color: COLORS.a, value: uniqueA },
+    { id: 'b', label: 'talia only', count: Math.round(uniqueB * dotScale), cx: 320, cy: 250, spread: 55, color: COLORS.b, value: uniqueB },
+    { id: 'userA', label: 'Jon + Jim', count: Math.round(TRIO_DATA.overlaps.userA * dotScale), cx: 80, cy: 165, spread: 35, color: '#7c3aed', value: TRIO_DATA.overlaps.userA },
+    { id: 'userB', label: 'Jon + talia', count: Math.round(TRIO_DATA.overlaps.userB * dotScale), cx: 250, cy: 135, spread: 16, color: '#0d9488', value: TRIO_DATA.overlaps.userB },
+    { id: 'ab', label: 'Jim + talia', count: Math.round(TRIO_DATA.overlaps.ab * dotScale), cx: 210, cy: 260, spread: 15, color: '#0891b2', value: TRIO_DATA.overlaps.ab },
+    { id: 'center', label: 'All three', count: Math.round(TRIO_DATA.overlaps.threeWay * dotScale), cx: 190, cy: 190, spread: 14, color: COLORS.center, value: TRIO_DATA.overlaps.threeWay },
+  ];
+
+  const [hoveredZone, setHoveredZone] = useState<string | null>(null);
+
+  // Generate dots in a packed circle pattern (Sunflower/Fibonacci)
+  const generateDots = (count: number, cx: number, cy: number, spread: number) => {
+    const dots: { x: number; y: number }[] = [];
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+    for (let i = 0; i < count; i++) {
+      const r = spread * Math.sqrt(i / count);
+      const theta = i * goldenAngle;
+      dots.push({ x: cx + r * Math.cos(theta), y: cy + r * Math.sin(theta) });
+    }
+    return dots;
+  };
+
+  return (
+    <div>
+      <style>{`
+        @keyframes dotAppear {
+          from { r: 0; opacity: 0; }
+          to { r: 2.5; opacity: 0.85; }
+        }
+      `}</style>
+      <svg viewBox="0 0 420 330" style={{ width: '100%', maxWidth: 540 }}>
+        {/* Zone backgrounds (subtle) */}
+        {zones.map((zone) => (
+          <circle
+            key={`bg-${zone.id}`}
+            cx={zone.cx} cy={zone.cy} r={zone.spread + 8}
+            fill={zone.color} fillOpacity={hoveredZone === zone.id ? 0.08 : 0.03}
+            stroke={zone.color} strokeOpacity={hoveredZone === zone.id ? 0.3 : 0.1}
+            strokeWidth={1} strokeDasharray={hoveredZone === zone.id ? 'none' : '3,3'}
+            style={{ transition: 'all 0.3s ease', cursor: 'pointer' }}
+            onMouseEnter={() => setHoveredZone(zone.id)}
+            onMouseLeave={() => setHoveredZone(null)}
+          />
+        ))}
+
+        {/* Dots */}
+        {zones.map((zone) => {
+          const dots = generateDots(zone.count, zone.cx, zone.cy, zone.spread);
+          const isActive = hoveredZone === null || hoveredZone === zone.id;
+          return dots.map((dot, i) => (
+            <circle
+              key={`${zone.id}-${i}`}
+              cx={dot.x} cy={dot.y}
+              r={2.5}
+              fill={zone.color}
+              opacity={isActive ? 0.85 : 0.12}
+              style={{
+                animation: `dotAppear 0.4s ease-out ${i * 0.004}s both`,
+                transition: 'opacity 0.3s ease',
+                cursor: 'pointer',
+              }}
+              onMouseEnter={() => setHoveredZone(zone.id)}
+              onMouseLeave={() => setHoveredZone(null)}
+            />
+          ));
+        })}
+
+        {/* Zone labels */}
+        {zones.map((zone) => {
+          const isActive = hoveredZone === null || hoveredZone === zone.id;
+          return (
+            <g key={`label-${zone.id}`} style={{ opacity: isActive ? 1 : 0.3, transition: 'opacity 0.3s' }}>
+              <text
+                x={zone.cx} y={zone.cy - zone.spread - 14}
+                textAnchor="middle" fontSize={9} fontWeight={600}
+                fill={zone.color} fontFamily="var(--font-mono)"
+              >
+                {zone.label}
+              </text>
+              <text
+                x={zone.cx} y={zone.cy - zone.spread - 4}
+                textAnchor="middle" fontSize={8}
+                fill="var(--color-text-faint)" fontFamily="var(--font-mono)"
+              >
+                {fmt(zone.value)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Hover info */}
+      <div style={{ textAlign: 'center', minHeight: 24, marginTop: 8 }}>
+        {hoveredZone && (() => {
+          const z = zones.find(z => z.id === hoveredZone)!;
+          return (
+            <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: z.color, fontWeight: 600 }}>
+              {z.label}: {fmt(z.value)} followers ({Math.round((z.value / total) * 100)}% of combined reach)
+            </span>
+          );
+        })()}
+      </div>
+
+      {/* Account legend */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 12 }}>
+        {[
+          { name: 'Jon', color: COLORS.user, size: TRIO_DATA.user.size },
+          { name: 'Jim', color: COLORS.a, size: TRIO_DATA.matchA.size },
+          { name: 'talia', color: COLORS.b, size: TRIO_DATA.matchB.size },
+        ].map(a => (
+          <div key={a.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontFamily: 'var(--font-mono)' }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: a.color }} />
+            <span style={{ color: a.color, fontWeight: 600 }}>{a.name}</span>
+            <span style={{ color: 'var(--color-text-faint)' }}>{fmt(a.size)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Visualization 5: Sankey / Flow Diagram ───────────────────────────────────
+
+function SankeyFlow() {
+  const uniqueUser = TRIO_DATA.user.size - TRIO_DATA.overlaps.userA - TRIO_DATA.overlaps.userB - TRIO_DATA.overlaps.threeWay;
+  const uniqueA = TRIO_DATA.matchA.size - TRIO_DATA.overlaps.userA - TRIO_DATA.overlaps.ab - TRIO_DATA.overlaps.threeWay;
+  const uniqueB = TRIO_DATA.matchB.size - TRIO_DATA.overlaps.userB - TRIO_DATA.overlaps.ab - TRIO_DATA.overlaps.threeWay;
+  const total = TRIO_DATA.totalReach;
+
+  // Left column: the three accounts (sources)
+  // Right column: where their followers end up (unique, shared pairs, shared all)
+  const leftHeight = 340;
+  const rightHeight = 340;
+  const leftX = 40;
+  const rightX = 520;
+  const gap = 6;
+
+  // Left nodes (accounts)
+  const leftNodes = [
+    { id: 'user', label: 'Jon', sublabel: fmt(TRIO_DATA.user.size), color: COLORS.user, size: TRIO_DATA.user.size },
+    { id: 'a', label: 'Jim', sublabel: fmt(TRIO_DATA.matchA.size), color: COLORS.a, size: TRIO_DATA.matchA.size },
+    { id: 'b', label: 'talia', sublabel: fmt(TRIO_DATA.matchB.size), color: COLORS.b, size: TRIO_DATA.matchB.size },
+  ];
+  const leftTotal = leftNodes.reduce((s, n) => s + n.size, 0);
+
+  // Compute left node positions
+  const leftNodePositions: { y: number; h: number }[] = [];
+  let leftCursor = 0;
+  for (const node of leftNodes) {
+    const h = (node.size / leftTotal) * (leftHeight - gap * (leftNodes.length - 1));
+    leftNodePositions.push({ y: leftCursor, h });
+    leftCursor += h + gap;
+  }
+
+  // Right nodes (destinations)
+  const rightNodes = [
+    { id: 'only-user', label: 'Only Jon', value: uniqueUser, color: COLORS.user },
+    { id: 'user-a', label: 'Jon + Jim', value: TRIO_DATA.overlaps.userA, color: '#7c3aed' },
+    { id: 'all', label: 'All three', value: TRIO_DATA.overlaps.threeWay, color: COLORS.center },
+    { id: 'user-b', label: 'Jon + talia', value: TRIO_DATA.overlaps.userB, color: '#0d9488' },
+    { id: 'a-b', label: 'Jim + talia', value: TRIO_DATA.overlaps.ab, color: '#0891b2' },
+    { id: 'only-a', label: 'Only Jim', value: uniqueA, color: COLORS.a },
+    { id: 'only-b', label: 'Only talia', value: uniqueB, color: COLORS.b },
+  ];
+
+  const rightNodePositions: { y: number; h: number }[] = [];
+  let rightCursor = 0;
+  for (const node of rightNodes) {
+    const h = Math.max(3, (node.value / total) * (rightHeight - gap * (rightNodes.length - 1)));
+    rightNodePositions.push({ y: rightCursor, h });
+    rightCursor += h + gap;
+  }
+  // Scale to fit
+  const rightScale = rightHeight / rightCursor;
+
+  for (let i = 0; i < rightNodePositions.length; i++) {
+    rightNodePositions[i].y *= rightScale;
+    rightNodePositions[i].h *= rightScale;
+  }
+
+  // Flows: from left node → right node
+  // Track cursor within each left and right node for stacking
+  const leftInternalCursors = leftNodePositions.map(n => n.y);
+  const rightInternalCursors = rightNodePositions.map(n => n.y);
+
+  // Define flows
+  const flowDefs: { leftIdx: number; rightIdx: number; value: number; color: string }[] = [
+    // Jon flows
+    { leftIdx: 0, rightIdx: 0, value: uniqueUser, color: COLORS.user },
+    { leftIdx: 0, rightIdx: 1, value: TRIO_DATA.overlaps.userA, color: '#7c3aed' },
+    { leftIdx: 0, rightIdx: 2, value: TRIO_DATA.overlaps.threeWay, color: COLORS.center },
+    { leftIdx: 0, rightIdx: 3, value: TRIO_DATA.overlaps.userB, color: '#0d9488' },
+    // Jim flows
+    { leftIdx: 1, rightIdx: 1, value: TRIO_DATA.overlaps.userA, color: '#7c3aed' },
+    { leftIdx: 1, rightIdx: 2, value: TRIO_DATA.overlaps.threeWay, color: COLORS.center },
+    { leftIdx: 1, rightIdx: 4, value: TRIO_DATA.overlaps.ab, color: '#0891b2' },
+    { leftIdx: 1, rightIdx: 5, value: uniqueA, color: COLORS.a },
+    // talia flows
+    { leftIdx: 2, rightIdx: 2, value: TRIO_DATA.overlaps.threeWay, color: COLORS.center },
+    { leftIdx: 2, rightIdx: 3, value: TRIO_DATA.overlaps.userB, color: '#0d9488' },
+    { leftIdx: 2, rightIdx: 4, value: TRIO_DATA.overlaps.ab, color: '#0891b2' },
+    { leftIdx: 2, rightIdx: 6, value: uniqueB, color: COLORS.b },
+  ];
+
+  // Build flow paths
+  const flows = flowDefs.map((f, i) => {
+    const leftNode = leftNodePositions[f.leftIdx];
+    const rightNode = rightNodePositions[f.rightIdx];
+    const leftH = (f.value / leftNodes[f.leftIdx].size) * leftNode.h;
+    const rightH = (f.value / rightNodes[f.rightIdx].value) * rightNode.h;
+
+    const ly = leftInternalCursors[f.leftIdx];
+    const ry = rightInternalCursors[f.rightIdx];
+
+    leftInternalCursors[f.leftIdx] += leftH;
+    rightInternalCursors[f.rightIdx] += rightH;
+
+    const nodeW = 14;
+    const x0 = leftX + nodeW;
+    const x1 = rightX;
+    const midX = (x0 + x1) / 2;
+
+    const path = `M${x0},${ly} C${midX},${ly} ${midX},${ry} ${x1},${ry}
+                  L${x1},${ry + rightH} C${midX},${ry + rightH} ${midX},${ly + leftH} ${x0},${ly + leftH} Z`;
+
+    return { path, color: f.color, delay: i * 0.06 };
+  });
+
+  const [hoveredFlow, setHoveredFlow] = useState<number | null>(null);
+
+  return (
+    <div>
+      <style>{`
+        @keyframes flowReveal {
+          from { opacity: 0; }
+          to { opacity: 0.45; }
+        }
+      `}</style>
+      <svg viewBox="0 0 620 360" style={{ width: '100%', maxWidth: 620 }}>
+        {/* Flows */}
+        {flows.map((flow, i) => (
+          <path
+            key={i}
+            d={flow.path}
+            fill={flow.color}
+            opacity={hoveredFlow === null ? 0.35 : hoveredFlow === i ? 0.6 : 0.08}
+            style={{
+              animation: `flowReveal 0.6s ease-out ${flow.delay}s both`,
+              transition: 'opacity 0.25s ease',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={() => setHoveredFlow(i)}
+            onMouseLeave={() => setHoveredFlow(null)}
+          />
+        ))}
+
+        {/* Left nodes */}
+        {leftNodes.map((node, i) => {
+          const pos = leftNodePositions[i];
+          return (
+            <g key={`left-${i}`}>
+              <rect x={leftX} y={pos.y} width={14} height={pos.h} rx={3} fill={node.color} />
+              <text x={leftX - 8} y={pos.y + pos.h / 2 - 6} textAnchor="end"
+                fontSize={12} fontWeight={700} fill={node.color} fontFamily="var(--font-mono)">
+                {node.label}
+              </text>
+              <text x={leftX - 8} y={pos.y + pos.h / 2 + 8} textAnchor="end"
+                fontSize={10} fill="var(--color-text-faint)" fontFamily="var(--font-mono)">
+                {node.sublabel}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Right nodes */}
+        {rightNodes.map((node, i) => {
+          const pos = rightNodePositions[i];
+          if (pos.h < 2) return null;
+          return (
+            <g key={`right-${i}`}>
+              <rect x={rightX} y={pos.y} width={14} height={pos.h} rx={3} fill={node.color} />
+              <text x={rightX + 22} y={pos.y + pos.h / 2 + 1} dominantBaseline="central"
+                fontSize={10} fontWeight={600} fill={node.color} fontFamily="var(--font-mono)">
+                {node.label}
+              </text>
+              <text x={rightX + 22 + (node.label.length * 6.5) + 6} y={pos.y + pos.h / 2 + 1} dominantBaseline="central"
+                fontSize={9} fill="var(--color-text-faint)" fontFamily="var(--font-mono)">
+                {fmt(node.value)}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Column headers */}
+        <text x={leftX + 7} y={-8} textAnchor="middle" fontSize={10} fill="var(--color-text-faint)" fontFamily="var(--font-sans)" fontWeight={500}>
+          Accounts
+        </text>
+        <text x={rightX + 7} y={-8} textAnchor="middle" fontSize={10} fill="var(--color-text-faint)" fontFamily="var(--font-sans)" fontWeight={500}>
+          Audience Segments
+        </text>
+      </svg>
+
+      {/* Hover info */}
+      <div style={{ textAlign: 'center', minHeight: 20, marginTop: 8 }}>
+        {hoveredFlow !== null && (() => {
+          const f = flowDefs[hoveredFlow];
+          const leftName = leftNodes[f.leftIdx].label;
+          const rightName = rightNodes[f.rightIdx].label;
+          return (
+            <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: f.color, fontWeight: 600 }}>
+              {fmt(f.value)} of {leftName}&apos;s followers → {rightName}
+            </span>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
+
 // ── Visualization 2: Concentric Rings / Radar ────────────────────────────────
 
 function ConcentricRings() {
@@ -475,15 +808,17 @@ export default function VisualizationsPage() {
         Overlap Visualizations
       </h1>
       <p style={{ fontSize: 14, color: 'var(--color-text-muted)', marginBottom: 48 }}>
-        Four ways to visualize the same data: Jon + Jim Waterson + talia jane
+        Six ways to visualize the same data: Jon + Jim Waterson + talia jane
       </p>
 
       {/* Card wrapper */}
       {[
-        { title: '1. Particle Dots', desc: 'Each dot = a cluster of followers. Shared followers drift to the center. Animated on load.', component: <ParticleDots /> },
-        { title: '2. Concentric Rings', desc: 'Radar-like arcs per account. Inner ring = shared followers. Outer arcs = proportional reach.', component: <ConcentricRings /> },
-        { title: '3. Waffle Grid', desc: 'Each square ≈ 318 followers. Hover to highlight segments. Very infographic-y and screenshot-friendly.', component: <WaffleGrid /> },
-        { title: '4. Proportional Bar', desc: 'One bar, all segments. Clean, mobile-friendly, instantly readable. Hover for details.', component: <ProportionalBar /> },
+        { title: '1a. Particle Dots (Organic)', desc: 'Each dot = a cluster of followers. Shared followers drift to the center. Animated on load.', component: <ParticleDots /> },
+        { title: '1b. Particle Dots (Structured)', desc: 'Same concept but with clear zones, Fibonacci dot packing, hover to highlight each segment. More readable.', component: <ParticleDotsStructured /> },
+        { title: '2. Sankey Flow', desc: 'Accounts on the left, audience segments on the right. Hover flows to see where each account\'s followers end up.', component: <SankeyFlow /> },
+        { title: '3. Concentric Rings', desc: 'Radar-like arcs per account. Inner ring = shared followers. Outer arcs = proportional reach.', component: <ConcentricRings /> },
+        { title: '4. Waffle Grid', desc: 'Each square ≈ 318 followers. Hover to highlight segments. Very infographic-y and screenshot-friendly.', component: <WaffleGrid /> },
+        { title: '5. Proportional Bar', desc: 'One bar, all segments. Clean, mobile-friendly, instantly readable. Hover for details.', component: <ProportionalBar /> },
       ].map((viz) => (
         <div key={viz.title} style={{
           marginBottom: 48, padding: 32,

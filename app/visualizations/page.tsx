@@ -1114,104 +1114,62 @@ function ProportionalBar() {
   );
 }
 
-// ── Visualization: Rectangle Overlap (v3) ─────────────────────────────────────
-// Proportional rectangles. DM Sans. Subtle glass. Sharp corners. Clean info.
+// ── Visualization: Rectangle Overlap (v4) ─────────────────────────────────────
+// Flat, bold, modern. No glass. Proportional. DM Sans throughout.
 
 function RectangleOverlap() {
   const total = TRIO_DATA.totalReach;
   const [hovered, setHovered] = useState<string | null>('center');
   const f = 'var(--font-sans)';
 
-  // ── Proportional sizing ──────────────────────────────────────────────
-  // Rectangle area ∝ follower count. sqrt gives side length.
-  const maxSide = 210;
+  // ── Proportional sizing (area ∝ followers) ────────────────────────────
+  const maxSide = 220;
   const maxSize = Math.max(TRIO_DATA.user.size, TRIO_DATA.matchA.size, TRIO_DATA.matchB.size);
   const side = (n: number) => Math.round(maxSide * Math.sqrt(n / maxSize));
 
   const userW = side(TRIO_DATA.user.size);
-  const userH = Math.round(userW * 0.82);
+  const userH = Math.round(userW * 0.78);
   const aW = side(TRIO_DATA.matchA.size);
-  const aH = Math.round(aW * 0.82);
+  const aH = Math.round(aW * 0.78);
   const bW = side(TRIO_DATA.matchB.size);
-  const bH = Math.round(bW * 0.82);
+  const bH = Math.round(bW * 0.78);
 
-  // ── Triangular layout centered on a shared overlap point ───────────
-  // All three rects converge toward a center point. The distance each
-  // rect's edge sits from center is proportional to its NON-overlap
-  // with the others. This guarantees a three-way intersection.
+  // ── Triangular layout ─────────────────────────────────────────────────
   const canvasW = 460;
-  const canvasH = 360;
+  const canvasH = 350;
   const cx = canvasW / 2;
   const cy = canvasH / 2;
 
-  // Pairwise overlap fractions (of the smaller set)
   const pairFrac = (shared: number, s1: number, s2: number) =>
     Math.min(0.65, Math.max(0.08, shared / Math.min(s1, s2)));
 
-  const fUserA = pairFrac(
-    TRIO_DATA.overlaps.userA + TRIO_DATA.overlaps.threeWay,
-    TRIO_DATA.user.size, TRIO_DATA.matchA.size
-  );
-  const fUserB = pairFrac(
-    TRIO_DATA.overlaps.userB + TRIO_DATA.overlaps.threeWay,
-    TRIO_DATA.user.size, TRIO_DATA.matchB.size
-  );
-  const fAB = pairFrac(
-    TRIO_DATA.overlaps.ab + TRIO_DATA.overlaps.threeWay,
-    TRIO_DATA.matchA.size, TRIO_DATA.matchB.size
-  );
+  const fUserA = pairFrac(TRIO_DATA.overlaps.userA + TRIO_DATA.overlaps.threeWay, TRIO_DATA.user.size, TRIO_DATA.matchA.size);
+  const fUserB = pairFrac(TRIO_DATA.overlaps.userB + TRIO_DATA.overlaps.threeWay, TRIO_DATA.user.size, TRIO_DATA.matchB.size);
+  const fAB = pairFrac(TRIO_DATA.overlaps.ab + TRIO_DATA.overlaps.threeWay, TRIO_DATA.matchA.size, TRIO_DATA.matchB.size);
 
-  // Each rect is placed so its inner edge overlaps with the center.
-  // Higher overlap fraction → rect pushed further toward center.
-  // Jon: top-left. Jim: top-right. talia: bottom-center.
-  // The "pull toward center" = average of pairwise overlaps with other two.
   const pullUser = (fUserA + fUserB) / 2;
   const pullA = (fUserA + fAB) / 2;
   const pullB = (fUserB + fAB) / 2;
-
-  // Spread controls how far apart the rects are (lower = more overlap)
   const spread = 0.55;
 
-  // Place rects relative to center. Each is offset in a direction,
-  // then pulled back toward center proportionally.
   const userX = Math.round(cx - userW * (0.5 + spread * (1 - pullUser)));
   const userY = Math.round(cy - userH * (0.5 + spread * (1 - pullUser) * 0.6));
-
   const aX = Math.round(cx - aW * (0.5 - spread * (1 - pullA)));
   const aY = Math.round(cy - aH * (0.5 + spread * (1 - pullA) * 0.6));
-
   const bX = Math.round(cx - bW * 0.5);
   const bY = Math.round(cy - bH * (0.5 - spread * (1 - pullB)));
 
   const rects = [
-    {
-      id: 'user', name: 'Jon', size: TRIO_DATA.user.size,
-      color: '#d946ef', colorMuted: 'rgba(217, 70, 239, 0.07)',
-      bg: 'rgba(217, 70, 239, 0.14)',
-      x: userX, y: userY, w: userW, h: userH,
-    },
-    {
-      id: 'a', name: 'Jim', size: TRIO_DATA.matchA.size,
-      color: '#3b82f6', colorMuted: 'rgba(59, 130, 246, 0.07)',
-      bg: 'rgba(59, 130, 246, 0.14)',
-      x: aX, y: aY, w: aW, h: aH,
-    },
-    {
-      id: 'b', name: 'talia', size: TRIO_DATA.matchB.size,
-      color: '#06b6d4', colorMuted: 'rgba(6, 182, 212, 0.07)',
-      bg: 'rgba(6, 182, 212, 0.14)',
-      x: bX, y: bY, w: bW, h: bH,
-    },
+    { id: 'user', name: 'Jon', size: TRIO_DATA.user.size, color: '#c026d3', bg: 'rgba(192, 38, 211, 0.12)', x: userX, y: userY, w: userW, h: userH },
+    { id: 'a', name: 'Jim', size: TRIO_DATA.matchA.size, color: '#2563eb', bg: 'rgba(37, 99, 235, 0.12)', x: aX, y: aY, w: aW, h: aH },
+    { id: 'b', name: 'talia', size: TRIO_DATA.matchB.size, color: '#0891b2', bg: 'rgba(8, 145, 178, 0.12)', x: bX, y: bY, w: bW, h: bH },
   ];
 
-  // ── Overlap zones (computed from rect positions) ─────────────────────
+  // ── Overlap zones ─────────────────────────────────────────────────────
   const intersect = (r1: typeof rects[0], r2: typeof rects[0]) => {
-    const x = Math.max(r1.x, r2.x);
-    const y = Math.max(r1.y, r2.y);
-    const x2 = Math.min(r1.x + r1.w, r2.x + r2.w);
-    const y2 = Math.min(r1.y + r1.h, r2.y + r2.h);
-    if (x2 > x && y2 > y) return { x, y, w: x2 - x, h: y2 - y, cx: (x + x2) / 2, cy: (y + y2) / 2 };
-    return null;
+    const x = Math.max(r1.x, r2.x), y = Math.max(r1.y, r2.y);
+    const x2 = Math.min(r1.x + r1.w, r2.x + r2.w), y2 = Math.min(r1.y + r1.h, r2.y + r2.h);
+    return (x2 > x && y2 > y) ? { x, y, w: x2 - x, h: y2 - y, cx: (x + x2) / 2, cy: (y + y2) / 2 } : null;
   };
 
   const userAZone = intersect(rects[0], rects[1]);
@@ -1219,12 +1177,10 @@ function RectangleOverlap() {
   const abZone = intersect(rects[1], rects[2]);
   const threeWayZone = (() => {
     if (!userAZone) return null;
-    const x = Math.max(userAZone.x, rects[2].x);
-    const y = Math.max(userAZone.y, rects[2].y);
+    const x = Math.max(userAZone.x, rects[2].x), y = Math.max(userAZone.y, rects[2].y);
     const x2 = Math.min(userAZone.x + userAZone.w, rects[2].x + rects[2].w);
     const y2 = Math.min(userAZone.y + userAZone.h, rects[2].y + rects[2].h);
-    if (x2 > x && y2 > y) return { x, y, w: x2 - x, h: y2 - y, cx: (x + x2) / 2, cy: (y + y2) / 2 };
-    return null;
+    return (x2 > x && y2 > y) ? { x, y, w: x2 - x, h: y2 - y, cx: (x + x2) / 2, cy: (y + y2) / 2 } : null;
   })();
 
   const zones = [
@@ -1234,63 +1190,41 @@ function RectangleOverlap() {
     { id: 'center', value: TRIO_DATA.overlaps.threeWay, zone: threeWayZone, owners: ['user', 'a', 'b'] },
   ];
 
-  // ── Info text logic ─────────────────────────────────────────────────
-  // Default (center): show combined reach + shared count
-  // Hover creator: show their count + how many are shared
+  // ── Info logic ────────────────────────────────────────────────────────
   const getInfo = () => {
     if (hovered === null || hovered === 'center') {
-      return {
-        headline: `${fmt(total)}`,
-        sub: `unique combined reach`,
-        detail: `${fmt(TRIO_DATA.overlaps.threeWay)} follow all three`,
-        color: '#6d28d9',
-      };
+      return { num: fmt(total), label: 'unique combined reach', color: '#1e1b4b' };
     }
-    const rect = rects.find(r => r.id === hovered)!;
-    const shared = rect.id === 'user'
+    const r = rects.find(r => r.id === hovered)!;
+    const shared = r.id === 'user'
       ? TRIO_DATA.overlaps.userA + TRIO_DATA.overlaps.userB + TRIO_DATA.overlaps.threeWay
-      : rect.id === 'a'
+      : r.id === 'a'
         ? TRIO_DATA.overlaps.userA + TRIO_DATA.overlaps.ab + TRIO_DATA.overlaps.threeWay
         : TRIO_DATA.overlaps.userB + TRIO_DATA.overlaps.ab + TRIO_DATA.overlaps.threeWay;
-    return {
-      headline: `${fmt(rect.size)}`,
-      sub: `follow ${rect.name}`,
-      detail: `${fmt(shared)} shared with others`,
-      color: rect.color,
-    };
+    return { num: fmt(r.size), label: `follow ${r.name} · ${fmt(shared)} shared`, color: r.color };
   };
-
   const info = getInfo();
 
   return (
     <div>
-      {/* ── Header: number + context ──────────────────────────── */}
-      <div style={{ textAlign: 'center', marginBottom: 24 }}>
-        <div style={{
-          fontSize: 36, fontWeight: 700, fontFamily: f,
-          color: info.color, letterSpacing: '-0.03em',
-          transition: 'color 0.3s ease',
-          lineHeight: 1.1,
+      {/* ── Stat line ─────────────────────────────────────────── */}
+      <div style={{ textAlign: 'center', marginBottom: 28 }}>
+        <span style={{
+          fontSize: 40, fontWeight: 700, fontFamily: f,
+          color: info.color, letterSpacing: '-0.04em',
+          transition: 'color 0.25s ease', lineHeight: 1,
         }}>
-          {info.headline}
-        </div>
-        <div style={{
-          fontSize: 14, fontWeight: 500, fontFamily: f,
-          color: '#64748b', marginTop: 2,
-          transition: 'color 0.3s ease',
+          {info.num}
+        </span>
+        <span style={{
+          fontSize: 15, fontWeight: 400, fontFamily: f,
+          color: '#94a3b8', marginLeft: 10,
         }}>
-          {info.sub}
-        </div>
-        <div style={{
-          fontSize: 12, fontWeight: 400, fontFamily: f,
-          color: info.color, marginTop: 4, opacity: 0.6,
-          transition: 'color 0.3s ease, opacity 0.3s ease',
-        }}>
-          {info.detail}
-        </div>
+          {info.label}
+        </span>
       </div>
 
-      {/* ── The rectangles ────────────────────────────────────── */}
+      {/* ── Canvas ────────────────────────────────────────────── */}
       <div
         style={{
           position: 'relative', width: canvasW, maxWidth: '100%',
@@ -1298,7 +1232,7 @@ function RectangleOverlap() {
         }}
         onMouseLeave={() => setHovered('center')}
       >
-        {/* Glass rectangles */}
+        {/* Rectangles — flat colored fills, no glass */}
         {rects.map((rect) => {
           const isActive = hovered === null || hovered === 'center' || hovered === rect.id;
           const isHov = hovered === rect.id;
@@ -1311,15 +1245,11 @@ function RectangleOverlap() {
                 position: 'absolute',
                 left: rect.x, top: rect.y,
                 width: rect.w, height: rect.h,
-                borderRadius: 4,
+                borderRadius: 3,
                 background: rect.bg,
-                backdropFilter: 'blur(2px)',
-                WebkitBackdropFilter: 'blur(2px)',
-                border: isHov
-                  ? `1.5px solid ${rect.color}40`
-                  : '1px solid rgba(255,255,255,0.2)',
-                opacity: isActive ? 1 : 0.18,
-                transition: 'opacity 0.35s ease, border-color 0.3s ease',
+                border: isHov ? `1.5px solid ${rect.color}30` : '1px solid transparent',
+                opacity: isActive ? 1 : 0.12,
+                transition: 'opacity 0.3s ease, border-color 0.25s ease',
                 mixBlendMode: 'multiply' as const,
                 zIndex: isHov ? 3 : rect.id === 'a' ? 2 : 1,
                 cursor: 'pointer',
@@ -1328,79 +1258,70 @@ function RectangleOverlap() {
           );
         })}
 
-        {/* ── Avatar + name in each rect's unique zone ─────── */}
+        {/* ── Creator labels (name + avatar) ──────────────────── */}
         {rects.map((rect) => {
-          // Position avatar at the outer corner (farthest from canvas center)
-          const ax = rect.id === 'user' ? rect.x + 24
-            : rect.id === 'a' ? rect.x + rect.w - 24
+          // Place at outer edge of each rect
+          const isLeft = rect.id === 'user';
+          const isRight = rect.id === 'a';
+          const isBottom = rect.id === 'b';
+
+          const lx = isLeft ? rect.x + 16
+            : isRight ? rect.x + rect.w - 16
             : rect.x + rect.w / 2;
-          const ay = rect.id === 'b' ? rect.y + rect.h - 28
-            : rect.y + 28;
+          const ly = isBottom ? rect.y + rect.h - 20
+            : rect.y + 20;
+
           const isActive = hovered === null || hovered === rect.id || hovered === 'center';
           const isHov = hovered === rect.id;
-          const alignRight = rect.id === 'a';
-          const alignCenter = rect.id === 'b';
 
           return (
             <div
-              key={`av-${rect.id}`}
+              key={`lbl-${rect.id}`}
               onMouseEnter={() => setHovered(rect.id)}
               onClick={() => setHovered(hovered === rect.id ? 'center' : rect.id)}
               style={{
                 position: 'absolute',
-                left: alignCenter ? ax - 45 : alignRight ? ax - 90 : ax,
-                top: alignCenter ? ay - 4 : ay - 16,
+                left: isBottom ? lx - 40 : isRight ? lx - 80 : lx,
+                top: ly - 12,
                 zIndex: 10,
-                display: 'flex', alignItems: alignCenter ? 'center' : 'center',
-                gap: alignCenter ? 0 : 8,
-                flexDirection: alignCenter ? 'column' : (alignRight ? 'row-reverse' : 'row'),
-                opacity: isActive ? 1 : 0.2,
-                transition: 'opacity 0.3s ease',
+                display: 'flex', alignItems: 'center', gap: 8,
+                flexDirection: isRight ? 'row-reverse' : 'row',
+                opacity: isActive ? 1 : 0.15,
+                transition: 'opacity 0.25s ease',
                 cursor: 'pointer',
               }}
             >
-              {/* Avatar */}
+              {/* Dot avatar */}
               <div style={{
-                width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                background: isHov ? rect.color : `${rect.color}18`,
+                width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                background: isHov ? rect.color : `${rect.color}15`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'background 0.3s ease',
+                transition: 'background 0.25s ease',
               }}>
                 <span style={{
-                  fontSize: 13, fontWeight: 600, fontFamily: f,
+                  fontSize: 12, fontWeight: 600, fontFamily: f,
                   color: isHov ? '#fff' : rect.color,
-                  transition: 'color 0.3s ease',
+                  transition: 'color 0.25s ease',
                 }}>
                   {rect.name[0]}
                 </span>
               </div>
-              {/* Name */}
-              <div style={{ textAlign: alignRight ? 'right' : 'left' }}>
-                <div style={{
-                  fontSize: 13, fontWeight: 600, fontFamily: f,
-                  color: rect.color, lineHeight: 1.2,
-                }}>
-                  {rect.name}
-                </div>
-                {isHov && (
-                  <div style={{
-                    fontSize: 11, fontWeight: 400, fontFamily: f,
-                    color: '#94a3b8', lineHeight: 1.2, marginTop: 1,
-                  }}>
-                    {fmt(rect.size)}
-                  </div>
-                )}
-              </div>
+              <span style={{
+                fontSize: 13, fontWeight: 600, fontFamily: f,
+                color: isHov ? rect.color : `${rect.color}99`,
+                transition: 'color 0.25s ease',
+                whiteSpace: 'nowrap',
+              }}>
+                {rect.name}
+              </span>
             </div>
           );
         })}
 
-        {/* ── Overlap zone labels (only show on relevant hover) ── */}
+        {/* ── Overlap numbers ─────────────────────────────────── */}
         {zones.map((z) => {
           if (!z.zone) return null;
           const isCenter = z.id === 'center';
-          // Only show pairwise numbers when one of the pair is hovered
-          // Always show center when in default/center state
           const show = isCenter
             ? (hovered === null || hovered === 'center')
             : z.owners.includes(hovered || '');
@@ -1409,26 +1330,31 @@ function RectangleOverlap() {
           return (
             <div
               key={`z-${z.id}`}
-              onMouseEnter={() => {
-                if (isCenter) setHovered('center');
-                else setHovered(z.owners[0]);
-              }}
+              onMouseEnter={() => isCenter ? setHovered('center') : setHovered(z.owners[0])}
               style={{
                 position: 'absolute',
-                left: z.zone.cx - 24,
-                top: z.zone.cy - (isCenter ? 12 : 8),
-                width: 48, textAlign: 'center',
+                left: z.zone.cx - 28, top: z.zone.cy - 10,
+                width: 56, textAlign: 'center',
                 zIndex: 10, cursor: 'pointer',
               }}
             >
               <div style={{
-                fontSize: isCenter ? 15 : 11,
+                fontSize: isCenter ? 14 : 11,
                 fontWeight: isCenter ? 700 : 500,
-                color: isCenter ? '#6d28d9' : '#64748b',
+                color: isCenter ? '#1e1b4b' : '#64748b',
                 fontFamily: f,
+                letterSpacing: '-0.01em',
               }}>
                 {fmt(z.value)}
               </div>
+              {isCenter && (
+                <div style={{
+                  fontSize: 10, fontWeight: 400, color: '#94a3b8',
+                  fontFamily: f, marginTop: 1,
+                }}>
+                  shared
+                </div>
+              )}
             </div>
           );
         })}

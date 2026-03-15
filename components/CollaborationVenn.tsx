@@ -24,7 +24,7 @@ export type OverlapData = {
 
 // ── Constants ───────────────────────────────────────────────────────────────────
 
-const ACCOUNT_COLORS = ['#FF007B', '#00DDFF', '#009DFF'];
+export const ACCOUNT_COLORS = ['#FF007B', '#00DDFF', '#009DFF'];
 const SVG_W = 680;
 const VENN_W = 440; // narrower to leave room for legend
 const SVG_PAD = 40;
@@ -404,7 +404,7 @@ function SummaryStats({ data }: { data: OverlapData }) {
 
 // ── Collaboration Read ──────────────────────────────────────────────────────────
 
-function CollaborationRead({ data }: { data: OverlapData }) {
+export function CollaborationRead({ data }: { data: OverlapData }) {
   const sorted = [...data.pairwiseOverlap].sort(
     (a, b) => b.jaccardSimilarity - a.jaccardSimilarity
   );
@@ -603,7 +603,7 @@ function solveCompactLayout(
 
 // ── Mini Venn SVG (compact, no legend, no labels) ───────────────────────────────
 
-function MiniVennSvg({ data, width = 240, id = '' }: { data: OverlapData; width?: number; id?: string }) {
+export function MiniVennSvg({ data, width = 240, id = '' }: { data: OverlapData; width?: number; id?: string }) {
   const maxR = width * 0.35;
   const minR = width * 0.12;
   const pad = width * 0.08;
@@ -749,6 +749,21 @@ export function VennCard({
               </button>
             </div>
             <VennDiagram data={data} />
+            {onDrillDown && (
+              <button
+                onClick={() => { onDrillDown(); setExpanded(false); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  margin: '20px auto 0', padding: '10px 20px',
+                  background: 'none', border: '1px solid var(--color-blue)',
+                  borderRadius: 4, cursor: 'pointer', color: 'var(--color-blue)',
+                  fontSize: 14, fontWeight: 500, fontFamily: 'var(--font-sans)',
+                }}
+              >
+                {sharedCount.toLocaleString()} {sharedLabel}
+                <span style={{ fontSize: 12 }}>↗</span>
+              </button>
+            )}
           </div>
         </div>
       )}

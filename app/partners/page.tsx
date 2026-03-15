@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatFollowers } from '@/lib/analysis/interpret';
+import { MiniVennSvg, ACCOUNT_COLORS } from '@/components/CollaborationVenn';
+import type { OverlapData } from '@/components/CollaborationVenn';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -432,155 +434,46 @@ function SignalBadge({ label }: { label: string }) {
   );
 }
 
-// ── Venn Diagram ─────────────────────────────────────────────────────────────
+// ── Venn data adapters ───────────────────────────────────────────────────────
 
-const VENN_COLORS = {
-  user: { fill: '#1a365d', stroke: '#1a365d' },
-  a:    { fill: '#2563eb', stroke: '#2563eb' },
-  b:    { fill: '#059669', stroke: '#059669' },
-};
-
-function VennDiagram({
-  trio,
-  userHandle,
-  userAvatar,
-}: {
-  trio: TrioRecommendation;
-  userHandle: string;
-  userAvatar?: string;
-}) {
+function trioToOverlapData(trio: TrioRecommendation, userHandle: string): OverlapData {
   const { overlaps, sizes } = trio;
-
-  // Circle positions — equilateral triangle arrangement
-  const cx = { user: 150, a: 105, b: 195 };
-  const cy = { user: 88, a: 162, b: 162 };
-  const r = 68;
-
-  // First letter for labels
-  const initials = {
-    user: userHandle.charAt(0).toUpperCase(),
-    a: (trio.matchA.displayName || trio.matchA.handle).charAt(0).toUpperCase(),
-    b: (trio.matchB.displayName || trio.matchB.handle).charAt(0).toUpperCase(),
+  const totalFollowers = sizes.user + sizes.a + sizes.b;
+  return {
+    accounts: [
+      { handle: userHandle, displayName: userHandle, followerCount: sizes.user },
+      { handle: trio.matchA.handle, displayName: trio.matchA.displayName || trio.matchA.handle, followerCount: sizes.a },
+      { handle: trio.matchB.handle, displayName: trio.matchB.displayName || trio.matchB.handle, followerCount: sizes.b },
+    ],
+    pairwiseOverlap: [
+      { handleA: userHandle, handleB: trio.matchA.handle, sharedFollowers: overlaps.userA, jaccardSimilarity: (sizes.user + sizes.a) > overlaps.userA ? overlaps.userA / (sizes.user + sizes.a - overlaps.userA) : 0 },
+      { handleA: userHandle, handleB: trio.matchB.handle, sharedFollowers: overlaps.userB, jaccardSimilarity: (sizes.user + sizes.b) > overlaps.userB ? overlaps.userB / (sizes.user + sizes.b - overlaps.userB) : 0 },
+      { handleA: trio.matchA.handle, handleB: trio.matchB.handle, sharedFollowers: overlaps.ab, jaccardSimilarity: (sizes.a + sizes.b) > overlaps.ab ? overlaps.ab / (sizes.a + sizes.b - overlaps.ab) : 0 },
+    ],
+    tripleOverlap: overlaps.threeWay,
+    uniqueReach: trio.totalReach,
+    totalFollowers,
+    homogeneityScore: totalFollowers > 0 ? 1 - (trio.totalReach / totalFollowers) : 0,
   };
+}
 
-  const avatars = {
-    user: userAvatar,
-    a: trio.matchA.avatar,
-    b: trio.matchB.avatar,
+function pairToPartnerOverlapData(pair: PairRecommendation, userHandle: string): OverlapData {
+  const totalFollowers = pair.sizes.user + pair.sizes.match;
+  return {
+    accounts: [
+      { handle: userHandle, displayName: userHandle, followerCount: pair.sizes.user },
+      { handle: pair.match.handle, displayName: pair.match.displayName || pair.match.handle, followerCount: pair.sizes.match },
+    ],
+    pairwiseOverlap: [{
+      handleA: userHandle,
+      handleB: pair.match.handle,
+      sharedFollowers: pair.overlap,
+      jaccardSimilarity: totalFollowers > pair.overlap ? pair.overlap / (totalFollowers - pair.overlap) : 0,
+    }],
+    uniqueReach: pair.totalReach,
+    totalFollowers,
+    homogeneityScore: totalFollowers > 0 ? 1 - (pair.totalReach / totalFollowers) : 0,
   };
-
-  return (
-    <svg viewBox="0 0 300 250" style={{ width: '100%', maxWidth: 320, margin: '0 auto', display: 'block' }}>
-      <defs>
-        {/* Clip paths for avatar images */}
-        {(['user', 'a', 'b'] as const).map(key => (
-          <clipPath key={key} id={`clip-${key}`}>
-            <circle cx={cx[key]} cy={cy[key]} r={r - 1} />
-          </clipPath>
-        ))}
-      </defs>
-
-      {/* Circle fills with transparency */}
-      {(['user', 'a', 'b'] as const).map(key => (
-        <circle
-          key={key}
-          cx={cx[key]}
-          cy={cy[key]}
-          r={r}
-          fill={VENN_COLORS[key].fill}
-          fillOpacity={0.12}
-          stroke={VENN_COLORS[key].stroke}
-          strokeWidth={2}
-          strokeOpacity={0.6}
-        />
-      ))}
-
-      {/* Avatar images or initials */}
-      {(['user', 'a', 'b'] as const).map(key => {
-        const avatar = avatars[key];
-        // Position labels outside the overlap areas
-        const labelCx = key === 'user' ? cx.user : key === 'a' ? cx.a - 22 : cx.b + 22;
-        const labelCy = key === 'user' ? cy.user - 26 : key === 'a' ? cy.a + 26 : cy.b + 26;
-
-        return avatar ? (
-          <g key={`avatar-${key}`}>
-            <clipPath id={`avatar-clip-${key}`}>
-              <circle cx={labelCx} cy={labelCy} r={16} />
-            </clipPath>
-            <image
-              href={avatar}
-              x={labelCx - 16} y={labelCy - 16}
-              width={32} height={32}
-              clipPath={`url(#avatar-clip-${key})`}
-              style={{ imageRendering: 'auto' }}
-            />
-            <circle cx={labelCx} cy={labelCy} r={16}
-              fill="none" stroke={VENN_COLORS[key].stroke} strokeWidth={2} />
-          </g>
-        ) : (
-          <g key={`initial-${key}`}>
-            <circle cx={labelCx} cy={labelCy} r={16}
-              fill={VENN_COLORS[key].fill} fillOpacity={0.15}
-              stroke={VENN_COLORS[key].stroke} strokeWidth={1.5} />
-            <text x={labelCx} y={labelCy + 1} textAnchor="middle" dominantBaseline="central"
-              fontSize={13} fontWeight={600} fill={VENN_COLORS[key].stroke}
-              fontFamily="var(--font-sans)">
-              {initials[key]}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* Overlap labels */}
-      {/* User-A overlap (top-left intersection) */}
-      <text x={(cx.user + cx.a) / 2} y={(cy.user + cy.a) / 2 - 2}
-        textAnchor="middle" fontSize={11} fontWeight={600} fill="#1a365d"
-        fontFamily="var(--font-mono)">
-        {formatFollowers(overlaps.userA)}
-      </text>
-
-      {/* User-B overlap (top-right intersection) */}
-      <text x={(cx.user + cx.b) / 2} y={(cy.user + cy.b) / 2 - 2}
-        textAnchor="middle" fontSize={11} fontWeight={600} fill="#1a365d"
-        fontFamily="var(--font-mono)">
-        {formatFollowers(overlaps.userB)}
-      </text>
-
-      {/* A-B overlap (bottom intersection) */}
-      <text x={(cx.a + cx.b) / 2} y={(cy.a + cy.b) / 2 + 12}
-        textAnchor="middle" fontSize={11} fontWeight={600} fill="#1a365d"
-        fontFamily="var(--font-mono)">
-        {formatFollowers(overlaps.ab)}
-      </text>
-
-      {/* Three-way center */}
-      {overlaps.threeWay > 0 && (
-        <g>
-          <circle cx={150} cy={137} r={18}
-            fill="#fff" fillOpacity={0.85} stroke="var(--color-navy)" strokeWidth={1} />
-          <text x={150} y={137} textAnchor="middle" dominantBaseline="central"
-            fontSize={10} fontWeight={700} fill="var(--color-navy)"
-            fontFamily="var(--font-mono)">
-            {formatFollowers(overlaps.threeWay)}
-          </text>
-        </g>
-      )}
-
-      {/* Size labels under circles */}
-      <text x={cx.user} y={cy.user - 50} textAnchor="middle"
-        fontSize={10} fill="var(--color-text-faint)" fontFamily="var(--font-mono)">
-        {formatFollowers(sizes.user)}
-      </text>
-      <text x={cx.a - 28} y={cy.a + 50} textAnchor="middle"
-        fontSize={10} fill="var(--color-text-faint)" fontFamily="var(--font-mono)">
-        {formatFollowers(sizes.a)}
-      </text>
-      <text x={cx.b + 28} y={cy.b + 50} textAnchor="middle"
-        fontSize={10} fill="var(--color-text-faint)" fontFamily="var(--font-mono)">
-        {formatFollowers(sizes.b)}
-      </text>
-    </svg>
-  );
 }
 
 // ── Trio card ────────────────────────────────────────────────────────────────
@@ -649,7 +542,7 @@ function TrioCard({
       </div>
 
       {/* Venn diagram */}
-      <VennDiagram trio={trio} userHandle={userHandle} userAvatar={userAvatar} />
+      <MiniVennSvg data={trioToOverlapData(trio, userHandle)} width={280} id={`trio-${rank}`} />
 
       {/* Trio members */}
       <div style={{
@@ -660,7 +553,7 @@ function TrioCard({
         <div>
           <div style={{
             fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const,
-            letterSpacing: '0.08em', color: VENN_COLORS.user.stroke, marginBottom: 4,
+            letterSpacing: '0.08em', color: ACCOUNT_COLORS[0], marginBottom: 4,
           }}>You</div>
           <div style={{
             fontSize: 13, fontWeight: 600, color: 'var(--color-navy)',
@@ -673,7 +566,7 @@ function TrioCard({
         <div>
           <div style={{
             fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const,
-            letterSpacing: '0.08em', color: VENN_COLORS.a.stroke, marginBottom: 4,
+            letterSpacing: '0.08em', color: ACCOUNT_COLORS[1], marginBottom: 4,
           }}>Collaborator 1</div>
           <div style={{
             fontSize: 13, fontWeight: 600, color: 'var(--color-navy)',
@@ -689,7 +582,7 @@ function TrioCard({
         <div>
           <div style={{
             fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const,
-            letterSpacing: '0.08em', color: VENN_COLORS.b.stroke, marginBottom: 4,
+            letterSpacing: '0.08em', color: ACCOUNT_COLORS[2], marginBottom: 4,
           }}>Collaborator 2</div>
           <div style={{
             fontSize: 13, fontWeight: 600, color: 'var(--color-navy)',
@@ -795,85 +688,6 @@ function NoCacheView({ user, onReset }: {
   );
 }
 
-// ── Pair Venn (two circles) ──────────────────────────────────────────────────
-
-function PairVennDiagram({
-  pair,
-  userHandle,
-  userAvatar,
-}: {
-  pair: PairRecommendation;
-  userHandle: string;
-  userAvatar?: string;
-}) {
-  const cx = { user: 120, match: 200 };
-  const cy = 100;
-  const r = 68;
-
-  const avatars = { user: userAvatar, match: pair.match.avatar };
-  const initials = {
-    user: userHandle.charAt(0).toUpperCase(),
-    match: (pair.match.displayName || pair.match.handle).charAt(0).toUpperCase(),
-  };
-  const colors = { user: VENN_COLORS.user, match: VENN_COLORS.a };
-
-  return (
-    <svg viewBox="0 0 320 200" style={{ width: '100%', maxWidth: 300, margin: '0 auto', display: 'block' }}>
-      {/* Circles */}
-      {(['user', 'match'] as const).map(key => (
-        <circle key={key} cx={cx[key]} cy={cy} r={r}
-          fill={colors[key].fill} fillOpacity={0.12}
-          stroke={colors[key].stroke} strokeWidth={2} strokeOpacity={0.6} />
-      ))}
-
-      {/* Avatars or initials */}
-      {(['user', 'match'] as const).map(key => {
-        const avatar = avatars[key];
-        const lx = key === 'user' ? cx.user - 28 : cx.match + 28;
-        return avatar ? (
-          <g key={`avatar-${key}`}>
-            <clipPath id={`pair-clip-${key}`}>
-              <circle cx={lx} cy={cy} r={16} />
-            </clipPath>
-            <image href={avatar} x={lx - 16} y={cy - 16} width={32} height={32}
-              clipPath={`url(#pair-clip-${key})`} style={{ imageRendering: 'auto' }} />
-            <circle cx={lx} cy={cy} r={16} fill="none" stroke={colors[key].stroke} strokeWidth={2} />
-          </g>
-        ) : (
-          <g key={`initial-${key}`}>
-            <circle cx={lx} cy={cy} r={16}
-              fill={colors[key].fill} fillOpacity={0.15} stroke={colors[key].stroke} strokeWidth={1.5} />
-            <text x={lx} y={cy + 1} textAnchor="middle" dominantBaseline="central"
-              fontSize={13} fontWeight={600} fill={colors[key].stroke} fontFamily="var(--font-sans)">
-              {initials[key]}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* Overlap count in center */}
-      <g>
-        <circle cx={(cx.user + cx.match) / 2} cy={cy} r={20}
-          fill="#fff" fillOpacity={0.85} stroke="var(--color-navy)" strokeWidth={1} />
-        <text x={(cx.user + cx.match) / 2} y={cy} textAnchor="middle" dominantBaseline="central"
-          fontSize={11} fontWeight={700} fill="var(--color-navy)" fontFamily="var(--font-mono)">
-          {formatFollowers(pair.overlap)}
-        </text>
-      </g>
-
-      {/* Size labels */}
-      <text x={cx.user} y={cy - r - 10} textAnchor="middle"
-        fontSize={10} fill="var(--color-text-faint)" fontFamily="var(--font-mono)">
-        {formatFollowers(pair.sizes.user)}
-      </text>
-      <text x={cx.match} y={cy - r - 10} textAnchor="middle"
-        fontSize={10} fill="var(--color-text-faint)" fontFamily="var(--font-mono)">
-        {formatFollowers(pair.sizes.match)}
-      </text>
-    </svg>
-  );
-}
-
 // ── Pair card ────────────────────────────────────────────────────────────────
 
 function PairCard({
@@ -939,18 +753,18 @@ function PairCard({
       </div>
 
       {/* Venn diagram */}
-      <PairVennDiagram pair={pair} userHandle={userHandle} userAvatar={userAvatar} />
+      <MiniVennSvg data={pairToPartnerOverlapData(pair, userHandle)} width={260} id={`pair-${rank}`} />
 
       {/* Members */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, margin: '16px 0', textAlign: 'center' }}>
         <div>
-          <div style={{ fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: VENN_COLORS.user.stroke, marginBottom: 4 }}>You</div>
+          <div style={{ fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: ACCOUNT_COLORS[0], marginBottom: 4 }}>You</div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-navy)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             @{userHandle}
           </div>
         </div>
         <div>
-          <div style={{ fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: VENN_COLORS.a.stroke, marginBottom: 4 }}>Collaborator</div>
+          <div style={{ fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: ACCOUNT_COLORS[1], marginBottom: 4 }}>Collaborator</div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-navy)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {pair.match.displayName || `@${pair.match.handle}`}
           </div>

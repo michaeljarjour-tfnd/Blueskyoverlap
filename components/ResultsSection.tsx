@@ -4,7 +4,8 @@ import { useState } from 'react';
 import type { AnalysisResult, BskyProfile, PairwiseOverlap, ThreeWayOverlap } from '@/lib/types';
 import { getInterpretation, formatFollowers } from '@/lib/analysis/interpret';
 import OverlapDetailModal from './OverlapDetailModal';
-import { VennCard, PairVennHeader, threeWayToOverlapData, pairToOverlapData } from './CollaborationVenn';
+import { VennCard, PairVennHeader, CollaborationRead, threeWayToOverlapData, pairToOverlapData } from './CollaborationVenn';
+import type { OverlapData } from './CollaborationVenn';
 
 interface Props {
   result: AnalysisResult;
@@ -237,11 +238,14 @@ function OverlapCard({
 function PairOverlapCards({
   overlap,
   onDrillDown,
+  useVenn = true,
 }: {
   overlap: PairwiseOverlap;
   onDrillDown: (overlapId: string, type: 'followers' | 'engagement') => void;
+  useVenn?: boolean;
 }) {
   const profiles = [overlap.account1, overlap.account2];
+  const isEstimatedFollowers = overlap.isEstimated;
 
   return (
     <div
@@ -251,31 +255,53 @@ function PairOverlapCards({
         gap: 16,
       }}
     >
-      <OverlapCard
-        type="followers"
-        sharedCount={overlap.followerOverlap}
-        jaccard={overlap.followerJaccard}
-        profiles={profiles}
-        sharedPcts={[overlap.followerOverlapPct1, overlap.followerOverlapPct2]}
-        uniquePcts={[
-          overlap.followers1 > 0 ? (overlap.uniqueFollowers1 / overlap.followers1) * 100 : 0,
-          overlap.followers2 > 0 ? (overlap.uniqueFollowers2 / overlap.followers2) * 100 : 0,
-        ]}
-        onDrillDown={() => onDrillDown(overlap.id, 'followers')}
-        isEstimated={overlap.isEstimated}
-      />
-      <OverlapCard
-        type="engagement"
-        sharedCount={overlap.engagementOverlap}
-        jaccard={overlap.engagementJaccard}
-        profiles={profiles}
-        sharedPcts={[overlap.engagementOverlapPct1, overlap.engagementOverlapPct2]}
-        uniquePcts={[
-          overlap.engaged1 > 0 ? (overlap.uniqueEngaged1 / overlap.engaged1) * 100 : 0,
-          overlap.engaged2 > 0 ? (overlap.uniqueEngaged2 / overlap.engaged2) * 100 : 0,
-        ]}
-        onDrillDown={() => onDrillDown(overlap.id, 'engagement')}
-      />
+      {useVenn ? (
+        <VennCard
+          data={pairToOverlapData(overlap, 'followers')}
+          label={isEstimatedFollowers ? 'Minimum Follower Overlap' : 'Follower Overlap'}
+          sharedCount={overlap.followerOverlap}
+          jaccard={overlap.followerJaccard}
+          sharedLabel={isEstimatedFollowers ? 'min. shared followers (est.)' : 'shared followers'}
+          onDrillDown={() => onDrillDown(overlap.id, 'followers')}
+        />
+      ) : (
+        <OverlapCard
+          type="followers"
+          sharedCount={overlap.followerOverlap}
+          jaccard={overlap.followerJaccard}
+          profiles={profiles}
+          sharedPcts={[overlap.followerOverlapPct1, overlap.followerOverlapPct2]}
+          uniquePcts={[
+            overlap.followers1 > 0 ? (overlap.uniqueFollowers1 / overlap.followers1) * 100 : 0,
+            overlap.followers2 > 0 ? (overlap.uniqueFollowers2 / overlap.followers2) * 100 : 0,
+          ]}
+          onDrillDown={() => onDrillDown(overlap.id, 'followers')}
+          isEstimated={overlap.isEstimated}
+        />
+      )}
+      {useVenn ? (
+        <VennCard
+          data={pairToOverlapData(overlap, 'engagement')}
+          label="Engagement Overlap"
+          sharedCount={overlap.engagementOverlap}
+          jaccard={overlap.engagementJaccard}
+          sharedLabel="shared engagers"
+          onDrillDown={() => onDrillDown(overlap.id, 'engagement')}
+        />
+      ) : (
+        <OverlapCard
+          type="engagement"
+          sharedCount={overlap.engagementOverlap}
+          jaccard={overlap.engagementJaccard}
+          profiles={profiles}
+          sharedPcts={[overlap.engagementOverlapPct1, overlap.engagementOverlapPct2]}
+          uniquePcts={[
+            overlap.engaged1 > 0 ? (overlap.uniqueEngaged1 / overlap.engaged1) * 100 : 0,
+            overlap.engaged2 > 0 ? (overlap.uniqueEngaged2 / overlap.engaged2) * 100 : 0,
+          ]}
+          onDrillDown={() => onDrillDown(overlap.id, 'engagement')}
+        />
+      )}
     </div>
   );
 }
@@ -286,15 +312,24 @@ function CollapsiblePair({
   overlap,
   defaultOpen,
   onDrillDown,
+  rank,
+  totalPairs,
+  useVenn = true,
 }: {
   overlap: PairwiseOverlap;
   defaultOpen?: boolean;
   onDrillDown: (overlapId: string, type: 'followers' | 'engagement') => void;
+  rank: number;
+  totalPairs: number;
+  useVenn?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
   const name1 = overlap.account1.displayName || overlap.account1.handle;
   const name2 = overlap.account2.displayName || overlap.account2.handle;
-  const folInterp = getInterpretation(overlap.followerJaccard);
+  const pct = overlap.followerJaccard;
+  const showTags = totalPairs >= 3;
+  const isWarmest = showTags && rank === 0;
+  const isFreshest = showTags && rank === totalPairs - 1;
 
   return (
     <div
@@ -321,7 +356,7 @@ function CollapsiblePair({
           gap: 12,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
           <span
             style={{
               fontFamily: 'var(--font-sans)',
@@ -334,7 +369,37 @@ function CollapsiblePair({
             <span style={{ color: 'var(--color-text-faint)', fontWeight: 400 }}>×</span>{' '}
             {name2}
           </span>
-          <OverlapBadge label={folInterp.label} />
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500,
+            color: 'var(--color-text-muted)', flexShrink: 0,
+          }}>
+            {pct.toFixed(1)}%
+          </span>
+          <div style={{
+            width: 100, height: 6, borderRadius: 3,
+            background: 'var(--color-bg-light, #f0f4f8)', flexShrink: 0, overflow: 'hidden',
+          }}>
+            <div style={{
+              width: `${Math.min(pct, 100)}%`, height: '100%', borderRadius: 3,
+              background: 'var(--color-blue)',
+            }} />
+          </div>
+          {isWarmest && (
+            <span style={{
+              fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
+              color: '#b45309', background: '#FEF3C7', padding: '2px 6px', borderRadius: 3,
+            }}>
+              warmest audience
+            </span>
+          )}
+          {isFreshest && (
+            <span style={{
+              fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
+              color: '#047857', background: '#D1FAE5', padding: '2px 6px', borderRadius: 3,
+            }}>
+              most fresh reach
+            </span>
+          )}
         </div>
         <span
           style={{
@@ -353,148 +418,41 @@ function CollapsiblePair({
       {open && (
         <div style={{ padding: '0 16px 16px' }}>
           <PairVennHeader data={pairToOverlapData(overlap, 'followers')} />
-          <PairOverlapCards overlap={overlap} onDrillDown={onDrillDown} />
+          <PairOverlapCards overlap={overlap} onDrillDown={onDrillDown} useVenn={useVenn} />
         </div>
       )}
     </div>
   );
 }
 
-// ── Insights ───────────────────────────────────────────────────────────────────
+// ── Analysis → OverlapData adapter (for CollaborationRead) ────────────────────
 
-function generateInsights(overlaps: PairwiseOverlap[]): string[] {
-  const insights: string[] = [];
+function analysisToOverlapData(result: AnalysisResult): OverlapData {
+  const accounts = result.profiles.map(p => ({
+    handle: p.handle,
+    displayName: p.displayName || p.handle,
+    followerCount: p.followersCount ?? 0,
+  }));
 
-  // ── Identify unique creator roles across all pairs ──
-  // Collect stats to assign each creator a distinctive strength
-  const creatorStats = new Map<string, {
-    name: string;
-    followers: number;
-    engagementRate: number;
-    uniqueReach: number;
-  }>();
+  const pairwiseOverlap = result.pairwiseOverlaps.map(po => ({
+    handleA: po.account1.handle,
+    handleB: po.account2.handle,
+    sharedFollowers: po.followerOverlap,
+    jaccardSimilarity: po.followerJaccard / 100,
+  }));
 
-  for (const o of overlaps) {
-    for (const [acct, followers, engaged, unique] of [
-      [o.account1, o.followers1, o.engaged1, o.uniqueFollowers1] as const,
-      [o.account2, o.followers2, o.engaged2, o.uniqueFollowers2] as const,
-    ]) {
-      const name = acct.displayName || acct.handle;
-      const existing = creatorStats.get(acct.did);
-      const engRate = followers > 0 ? (engaged / followers) * 100 : 0;
-      if (!existing || followers > existing.followers) {
-        creatorStats.set(acct.did, { name, followers, engagementRate: engRate, uniqueReach: unique });
-      }
-    }
-  }
+  const totalFollowers = accounts.reduce((s, a) => s + a.followerCount, 0);
+  const totalOverlap = result.pairwiseOverlaps.reduce((s, po) => s + po.followerOverlap, 0);
+  const uniqueReach = totalFollowers - totalOverlap + (result.threeWayOverlap?.follower ?? 0);
 
-  // Assign roles based on standout strengths
-  const creators = Array.from(creatorStats.values());
-  if (creators.length >= 2) {
-    const byFollowers = [...creators].sort((a, b) => b.followers - a.followers);
-    const byEngagement = [...creators].sort((a, b) => b.engagementRate - a.engagementRate);
-    const byUnique = [...creators].sort((a, b) => b.uniqueReach - a.uniqueReach);
-
-    const roleLines: string[] = [];
-    const assigned = new Set<string>();
-
-    // Biggest audience
-    if (!assigned.has(byFollowers[0].name)) {
-      roleLines.push(`${byFollowers[0].name} brings the largest reach — their audience is the foundation any collaboration builds on.`);
-      assigned.add(byFollowers[0].name);
-    }
-    // Highest engagement rate
-    if (!assigned.has(byEngagement[0].name)) {
-      roleLines.push(`${byEngagement[0].name} has the strongest engagement — their audience doesn't just follow, they show up and interact.`);
-      assigned.add(byEngagement[0].name);
-    }
-    // Most unique followers
-    if (!assigned.has(byUnique[0].name)) {
-      roleLines.push(`${byUnique[0].name} opens doors to the most untapped audience — followers the others can't reach on their own.`);
-      assigned.add(byUnique[0].name);
-    }
-    // Anyone left gets a role too
-    for (const c of creators) {
-      if (!assigned.has(c.name)) {
-        roleLines.push(`${c.name} adds depth and diversity to the mix — a voice that rounds out the group.`);
-        assigned.add(c.name);
-      }
-    }
-
-    if (roleLines.length > 0) {
-      insights.push(roleLines.join(' '));
-    }
-  }
-
-  for (const o of overlaps) {
-    const a1 = o.account1.displayName || o.account1.handle;
-    const a2 = o.account2.displayName || o.account2.handle;
-    const fj = o.followerJaccard;
-    const ej = o.engagementJaccard;
-
-    // ── Partnership potential based on overlap level ──
-    if (fj > 40) {
-      insights.push(
-        `${a1} and ${a2} are practically family — their audiences already trust both names. A collab here is less about discovery and more about doubling down: joint endorsements, shared projects, and going deeper together. The crowd is already cheering for both of you.`
-      );
-    } else if (fj > 20) {
-      insights.push(
-        `${a1} and ${a2} have a great thing going — strong crossover means your shared fans will amplify anything you create together. That built-in audience is your launchpad. Plus, there's still plenty of fresh audience on each side to grow into.`
-      );
-    } else if (fj > 10) {
-      insights.push(
-        `This is a really exciting match. ${a1} and ${a2} overlap just enough to have natural credibility together, but most of each other's audience is brand new territory. The shared followers give you social proof, the unique ones give you growth. Best of both worlds.`
-      );
-    } else if (fj > 3) {
-      insights.push(
-        `${a1} and ${a2} are mostly reaching different people — and that's actually a great thing for growth. The small bridge of shared followers can spark the connection, while the vast unique audiences on both sides mean real discovery potential.`
-      );
-    } else {
-      insights.push(
-        `${a1} and ${a2} have almost zero audience overlap — every follower one introduces to the other is genuinely new. This is a bold discovery play. If the content fits, the growth ceiling here is huge.`
-      );
-    }
-
-    // ── Engagement vs follower divergence ──
-    if (ej > fj + 8 && ej > 5) {
-      insights.push(
-        `Here's something exciting: the engagement overlap between ${a1} and ${a2} is even higher than the follower overlap. That means people who actively engage with both creators share real taste and interest — a collab here is likely to land well with the audiences that matter most.`
-      );
-    } else if (fj > ej + 10 && fj > 10) {
-      insights.push(
-        `Interesting dynamic: ${a1} and ${a2} share plenty of followers, but their engaged audiences are more distinct. These followers appreciate both creators but in different ways. The sweet spot is letting each person lead with their own style — the audience will love the contrast.`
-      );
-    }
-
-    // ── Asymmetric reach ──
-    const pctDiff = Math.abs(o.followerOverlapPct1 - o.followerOverlapPct2);
-    if (pctDiff > 15 && fj > 2) {
-      const bigger = o.followerOverlapPct1 < o.followerOverlapPct2 ? a1 : a2;
-      const smaller = o.followerOverlapPct1 < o.followerOverlapPct2 ? a2 : a1;
-      insights.push(
-        `${bigger} brings a bigger stage, and ${smaller} brings a focused, engaged community. That's not a mismatch — it's a recipe. ${smaller} gets meaningful exposure, and ${bigger} gets the credibility boost that comes from partnering with someone whose audience truly trusts them.`
-      );
-    }
-  }
-
-  return insights;
-}
-
-function InsightsPanel({ overlaps }: { overlaps: PairwiseOverlap[] }) {
-  const insights = generateInsights(overlaps);
-
-  if (insights.length === 0) return null;
-
-  return (
-    <div className="insights-card">
-      <h3>Insights</h3>
-      <ul>
-        {insights.map((text, i) => (
-          <li key={i}>{text}</li>
-        ))}
-      </ul>
-    </div>
-  );
+  return {
+    accounts,
+    pairwiseOverlap,
+    tripleOverlap: result.threeWayOverlap?.follower,
+    uniqueReach,
+    totalFollowers,
+    homogeneityScore: totalFollowers > 0 ? 1 - (uniqueReach / totalFollowers) : 0,
+  };
 }
 
 // ── Creator card ───────────────────────────────────────────────────────────────
@@ -718,6 +676,7 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
 
   const isSinglePair = profiles.length === 2;
   const isMulti = profiles.length >= 3;
+  const useVenn = profiles.length <= 3;
 
   // Sort pairs by follower Jaccard descending (done once, stable)
   const sortedPairs = [...pairwiseOverlaps].sort((a, b) => b.followerJaccard - a.followerJaccard);
@@ -732,6 +691,7 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
           <PairOverlapCards
             overlap={pairwiseOverlaps[0]}
             onDrillDown={handleDrillDown}
+            useVenn={useVenn}
           />
         </div>
       )}
@@ -758,13 +718,16 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
               overlap={o}
               defaultOpen={i === 0}
               onDrillDown={handleDrillDown}
+              rank={i}
+              totalPairs={sortedPairs.length}
+              useVenn={useVenn}
             />
           ))}
         </div>
       )}
 
-      {/* ── Insights ────────────────────────────────────────────────────────── */}
-      <InsightsPanel overlaps={pairwiseOverlaps} />
+      {/* ── Collaboration read ──────────────────────────────────────────────── */}
+      <CollaborationRead data={analysisToOverlapData(result)} />
 
       {/* ── Share button ──────────────────────────────────────────────────── */}
       {mode === 'live' && (

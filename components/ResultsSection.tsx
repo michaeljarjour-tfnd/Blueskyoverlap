@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { AnalysisResult, BskyProfile, PairwiseOverlap, ThreeWayOverlap } from '@/lib/types';
 import { getInterpretation, formatFollowers } from '@/lib/analysis/interpret';
 import OverlapDetailModal from './OverlapDetailModal';
+import { VennCard, PairVennHeader, threeWayToOverlapData, pairToOverlapData } from './CollaborationVenn';
 
 interface Props {
   result: AnalysisResult;
@@ -351,6 +352,7 @@ function CollapsiblePair({
 
       {open && (
         <div style={{ padding: '0 16px 16px' }}>
+          <PairVennHeader data={pairToOverlapData(overlap, 'followers')} />
           <PairOverlapCards overlap={overlap} onDrillDown={onDrillDown} />
         </div>
       )}
@@ -568,17 +570,22 @@ function MultiHeading({
   );
 }
 
-// ── Three-way overlap hero cards ───────────────────────────────────────────────
+// ── Three-way overlap hero cards (Venn visualization) ─────────────────────────
 
 function ThreeWayOverlapCards({
   threeWay,
   totalAccounts,
+  pairwiseOverlaps,
   onDrillDown,
 }: {
   threeWay: ThreeWayOverlap;
   totalAccounts: number;
+  pairwiseOverlaps: PairwiseOverlap[];
   onDrillDown: (id: string, type: 'followers' | 'engagement') => void;
 }) {
+  const followerVennData = threeWayToOverlapData(threeWay, pairwiseOverlaps, 'followers');
+  const engagementVennData = threeWayToOverlapData(threeWay, pairwiseOverlaps, 'engagement');
+
   return (
     <div style={{ marginBottom: 24 }}>
       <MultiHeading profiles={threeWay.profiles} totalAccounts={totalAccounts} />
@@ -596,22 +603,20 @@ function ThreeWayOverlapCards({
       )}
       {totalAccounts === 3 && <div style={{ marginBottom: 14 }} />}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <OverlapCard
-          type="followers"
+        <VennCard
+          data={followerVennData}
+          label="Follower Overlap"
           sharedCount={threeWay.follower}
           jaccard={threeWay.followerJaccard}
-          profiles={threeWay.profiles}
-          sharedPcts={threeWay.followerPcts}
-          uniquePcts={threeWay.followerPcts.map((p) => 100 - p)}
+          sharedLabel="shared followers"
           onDrillDown={() => onDrillDown('three-way', 'followers')}
         />
-        <OverlapCard
-          type="engagement"
+        <VennCard
+          data={engagementVennData}
+          label="Engagement Overlap"
           sharedCount={threeWay.engagement}
           jaccard={threeWay.engagementJaccard}
-          profiles={threeWay.profiles}
-          sharedPcts={threeWay.engagementPcts}
-          uniquePcts={threeWay.engagementPcts.map((p) => 100 - p)}
+          sharedLabel="shared engagers"
           onDrillDown={() => onDrillDown('three-way', 'engagement')}
         />
       </div>
@@ -719,6 +724,7 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
 
   return (
     <div>
+
       {/* ── Two-account view: direct overlap cards ─────────────────────────── */}
       {isSinglePair && pairwiseOverlaps.length > 0 && (
         <div style={{ marginBottom: 24 }}>
@@ -735,6 +741,7 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
         <ThreeWayOverlapCards
           threeWay={threeWayOverlap}
           totalAccounts={profiles.length}
+          pairwiseOverlaps={pairwiseOverlaps}
           onDrillDown={handleDrillDown}
         />
       )}

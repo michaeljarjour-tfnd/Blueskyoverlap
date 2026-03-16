@@ -599,7 +599,7 @@ function TrioCard({
               </div>
               <div>
                 <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>Overlap percentage</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: 'var(--color-blue)', lineHeight: 1.1 }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
                   {avgJaccard.toFixed(0)}%
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>
@@ -824,7 +824,7 @@ function PairCard({
               </div>
               <div>
                 <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>Overlap percentage</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: 'var(--color-blue)', lineHeight: 1.1 }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
                   {jaccardPct.toFixed(0)}%
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>

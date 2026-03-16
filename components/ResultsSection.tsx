@@ -364,6 +364,7 @@ function PairCard({
   totalPairs,
   profiles,
   mode,
+  isSelected,
   onSelect,
 }: {
   overlap: PairwiseOverlap;

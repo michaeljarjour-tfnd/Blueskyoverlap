@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatFollowers } from '@/lib/analysis/interpret';
-import { MiniVennSvg, ACCOUNT_COLORS } from '@/components/CollaborationVenn';
+import { VennDiagram, MiniVennSvg, ACCOUNT_COLORS, fmt } from '@/components/CollaborationVenn';
 import type { OverlapData } from '@/components/CollaborationVenn';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -524,77 +524,92 @@ function TrioCard({
         </div>
       </div>
 
-      {/* Combined reach — hero */}
-      <div style={{
-        textAlign: 'center', padding: '20px 16px', marginBottom: 16,
-        background: 'linear-gradient(135deg, #EBF2FD 0%, #f0f7ff 100%)',
-        borderRadius: 6, border: '1px solid #d6e4f5',
-      }}>
-        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-blue)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
-          Combined audience
-        </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 32, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
-          {formatFollowers(trio.totalReach)}
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
-          unique followers across all three
-        </div>
-      </div>
+      {/* Stats bar — Collaboration reach + Median new audience + signals */}
+      {(() => {
+        const totalFollowers = trio.sizes.user + trio.sizes.a + trio.sizes.b;
+        const newAudiences = [trio.newAudienceForUser, trio.newAudienceForA, trio.newAudienceForB].sort((a, b) => a - b);
+        const medianNew = newAudiences[1]; // middle of 3
+        const overlapLabel = trio.overlapLevel === 'high' ? 'High topic match'
+          : trio.overlapLevel === 'medium' ? 'Moderate overlap' : 'Low overlap';
+        return (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 24, marginBottom: 20 }}>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>Collaboration reach</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+                {fmt(trio.totalReach)}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                vs. {fmt(totalFollowers)} total followers
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>Median new audience</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+                {fmt(medianNew)}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>per creator</div>
+            </div>
+            <div style={{ marginLeft: 'auto', paddingTop: 4 }}>
+              <span style={{
+                display: 'inline-block', padding: '6px 14px', borderRadius: 4,
+                fontSize: 12, fontWeight: 700, letterSpacing: '0.03em',
+                background: trio.overlapLevel === 'high' ? '#04182B' : trio.overlapLevel === 'medium' ? '#EBF2FD' : '#f0f4f8',
+                color: trio.overlapLevel === 'high' ? '#fff' : trio.overlapLevel === 'medium' ? '#034EAD' : '#5a6a7a',
+              }}>
+                {overlapLabel}
+              </span>
+            </div>
+          </div>
+        );
+      })()}
 
-      {/* Venn diagram */}
-      <MiniVennSvg data={trioToOverlapData(trio, userHandle)} width={280} id={`trio-${rank}`} />
+      {/* Full interactive Venn diagram with legend */}
+      {(() => {
+        const vennData = trioToOverlapData(trio, userHandle);
+        const { overlaps } = trio;
+        const totalOverlap = overlaps.userA + overlaps.userB + overlaps.ab - 2 * overlaps.threeWay;
+        const avgJaccard = vennData.pairwiseOverlap.length > 0
+          ? (vennData.pairwiseOverlap.reduce((s, p) => s + p.jaccardSimilarity, 0) / vennData.pairwiseOverlap.length) * 100
+          : 0;
+        const reachPct = vennData.uniqueReach > 0 ? ((overlaps.threeWay / vennData.uniqueReach) * 100).toFixed(1) : '0';
+        const interpLabel = avgJaccard > 40 ? 'Very high' : avgJaccard > 20 ? 'High' : avgJaccard > 10 ? 'Moderate' : avgJaccard > 3 ? 'Low' : 'Minimal';
+        return (
+          <div style={{
+            background: '#fff', border: '1px solid var(--color-border)',
+            borderRadius: 6, padding: '20px 22px', marginBottom: 16,
+          }}>
+            <div className="section-label" style={{ marginBottom: 12 }}>Follower Overlap</div>
+            <VennDiagram data={vennData} />
 
-      {/* Trio members */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12,
-        margin: '16px 0', textAlign: 'center',
-      }}>
-        {/* User */}
-        <div>
-          <div style={{
-            fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const,
-            letterSpacing: '0.08em', color: ACCOUNT_COLORS[0], marginBottom: 4,
-          }}>You</div>
-          <div style={{
-            fontSize: 13, fontWeight: 600, color: 'var(--color-navy)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            @{userHandle}
+            {/* Below-Venn stats */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
+              gap: 16, marginTop: 16, paddingTop: 14,
+              borderTop: '1px solid var(--color-border)',
+            }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>Shared by all three</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+                  {fmt(overlaps.threeWay)}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>
+                  {reachPct}% of unique reach
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>Overlap percentage</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: 'var(--color-blue)', lineHeight: 1.1 }}>
+                  {avgJaccard.toFixed(0)}%
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>
+                  {interpLabel} overlap
+                </div>
+              </div>
+              <div />
+            </div>
           </div>
-        </div>
-        {/* Match A */}
-        <div>
-          <div style={{
-            fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const,
-            letterSpacing: '0.08em', color: ACCOUNT_COLORS[1], marginBottom: 4,
-          }}>Collaborator 1</div>
-          <div style={{
-            fontSize: 13, fontWeight: 600, color: 'var(--color-navy)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {trio.matchA.displayName || `@${trio.matchA.handle}`}
-          </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-faint)' }}>
-            @{trio.matchA.handle}
-          </div>
-        </div>
-        {/* Match B */}
-        <div>
-          <div style={{
-            fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const,
-            letterSpacing: '0.08em', color: ACCOUNT_COLORS[2], marginBottom: 4,
-          }}>Collaborator 2</div>
-          <div style={{
-            fontSize: 13, fontWeight: 600, color: 'var(--color-navy)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {trio.matchB.displayName || `@${trio.matchB.handle}`}
-          </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-faint)' }}>
-            @{trio.matchB.handle}
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* New audience opportunity */}
       <div style={{
@@ -738,44 +753,87 @@ function PairCard({
         </div>
       </div>
 
-      {/* Combined reach — hero */}
-      <div style={{
-        textAlign: 'center', padding: '20px 16px', marginBottom: 16,
-        background: 'linear-gradient(135deg, #EBF2FD 0%, #f0f7ff 100%)',
-        borderRadius: 6, border: '1px solid #d6e4f5',
-      }}>
-        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-blue)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
-          Combined audience
-        </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 32, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
-          {formatFollowers(pair.totalReach)}
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
-          unique followers together
-        </div>
-      </div>
+      {/* Stats bar — Collaboration reach + Median new audience + signals */}
+      {(() => {
+        const totalFollowers = pair.sizes.user + pair.sizes.match;
+        const medianNew = Math.round((pair.newAudienceForUser + pair.newAudienceForMatch) / 2);
+        const overlapLabel = pair.overlapLevel === 'high' ? 'High topic match'
+          : pair.overlapLevel === 'medium' ? 'Moderate overlap' : 'Low overlap';
+        return (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 24, marginBottom: 20 }}>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>Collaboration reach</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+                {fmt(pair.totalReach)}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                vs. {fmt(totalFollowers)} total followers
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>Median new audience</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+                {fmt(medianNew)}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>per creator</div>
+            </div>
+            <div style={{ marginLeft: 'auto', paddingTop: 4 }}>
+              <span style={{
+                display: 'inline-block', padding: '6px 14px', borderRadius: 4,
+                fontSize: 12, fontWeight: 700, letterSpacing: '0.03em',
+                background: pair.overlapLevel === 'high' ? '#04182B' : pair.overlapLevel === 'medium' ? '#EBF2FD' : '#f0f4f8',
+                color: pair.overlapLevel === 'high' ? '#fff' : pair.overlapLevel === 'medium' ? '#034EAD' : '#5a6a7a',
+              }}>
+                {overlapLabel}
+              </span>
+            </div>
+          </div>
+        );
+      })()}
 
-      {/* Venn diagram */}
-      <MiniVennSvg data={pairToPartnerOverlapData(pair, userHandle)} width={260} id={`pair-${rank}`} />
+      {/* Full interactive Venn diagram with legend */}
+      {(() => {
+        const vennData = pairToPartnerOverlapData(pair, userHandle);
+        const jaccard = vennData.pairwiseOverlap[0]?.jaccardSimilarity ?? 0;
+        const jaccardPct = jaccard * 100;
+        const reachPct = vennData.uniqueReach > 0 ? ((pair.overlap / vennData.uniqueReach) * 100).toFixed(1) : '0';
+        const interpLabel = jaccardPct > 40 ? 'Very high' : jaccardPct > 20 ? 'High' : jaccardPct > 10 ? 'Moderate' : jaccardPct > 3 ? 'Low' : 'Minimal';
+        return (
+          <div style={{
+            background: '#fff', border: '1px solid var(--color-border)',
+            borderRadius: 6, padding: '20px 22px', marginBottom: 16,
+          }}>
+            <div className="section-label" style={{ marginBottom: 12 }}>Follower Overlap</div>
+            <VennDiagram data={vennData} />
 
-      {/* Members */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, margin: '16px 0', textAlign: 'center' }}>
-        <div>
-          <div style={{ fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: ACCOUNT_COLORS[0], marginBottom: 4 }}>You</div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-navy)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            @{userHandle}
+            {/* Below-Venn stats */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr',
+              gap: 16, marginTop: 16, paddingTop: 14,
+              borderTop: '1px solid var(--color-border)',
+            }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>Shared followers</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+                  {fmt(pair.overlap)}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>
+                  {reachPct}% of unique reach
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>Overlap percentage</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: 'var(--color-blue)', lineHeight: 1.1 }}>
+                  {jaccardPct.toFixed(0)}%
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>
+                  {interpLabel} overlap
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-        <div>
-          <div style={{ fontSize: 8, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: ACCOUNT_COLORS[1], marginBottom: 4 }}>Collaborator</div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-navy)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {pair.match.displayName || `@${pair.match.handle}`}
-          </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-faint)' }}>
-            @{pair.match.handle}
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* New audience opportunity */}
       <div style={{

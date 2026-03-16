@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { AnalysisResult, BskyProfile, PairwiseOverlap, ThreeWayOverlap } from '@/lib/types';
 import { getInterpretation, formatFollowers } from '@/lib/analysis/interpret';
 import OverlapDetailModal from './OverlapDetailModal';
-import { VennCard, CollaborationRead, threeWayToOverlapData, pairToOverlapData, ACCOUNT_COLORS } from './CollaborationVenn';
+import { VennCard, VennDiagram, CollaborationRead, threeWayToOverlapData, pairToOverlapData, ACCOUNT_COLORS, fmt } from './CollaborationVenn';
 import type { OverlapData } from './CollaborationVenn';
 
 interface Props {
@@ -429,10 +429,10 @@ function PairCard({
         {name2}
       </div>
 
-      {/* Progress bar + percentage */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+      {/* Progress bar */}
+      <div style={{ marginBottom: 10 }}>
         <div style={{
-          flex: 1, height: 8, borderRadius: 4,
+          height: 8, borderRadius: 4,
           background: 'rgba(4, 24, 43, 0.2)',
           overflow: 'hidden',
         }}>
@@ -444,36 +444,23 @@ function PairCard({
             transition: 'width 0.3s ease',
           }} />
         </div>
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 13,
-          fontWeight: 500,
-          color: 'var(--color-text-muted)',
-          flexShrink: 0,
-          minWidth: 45,
-          textAlign: 'right',
-        }}>
-          {pct.toFixed(1)}%
-        </span>
       </div>
 
-      {/* Tags */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      {/* Percentage + label */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 14,
+          fontWeight: 600,
+          color: 'var(--color-navy)',
+        }}>
+          {pct.toFixed(0)}%
+        </span>
         {isWarmest && (
-          <span style={{
-            fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
-            color: '#b45309', background: '#FEF3C7', padding: '2px 6px', borderRadius: 3,
-          }}>
-            warmest audience
-          </span>
+          <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>closest pair</span>
         )}
         {isFreshest && (
-          <span style={{
-            fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
-            color: '#047857', background: '#D1FAE5', padding: '2px 6px', borderRadius: 3,
-          }}>
-            most fresh reach
-          </span>
+          <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>furthest pair</span>
         )}
       </div>
     </div>
@@ -611,41 +598,122 @@ function ThreeWayOverlapCards({
   onDrillDown: (id: string, type: 'followers' | 'engagement') => void;
   mode: 'followers' | 'engagement';
 }) {
-  const vennData = mode === 'followers'
-    ? threeWayToOverlapData(threeWay, pairwiseOverlaps, 'followers')
-    : threeWayToOverlapData(threeWay, pairwiseOverlaps, 'engagement');
+  const vennData = threeWayToOverlapData(threeWay, pairwiseOverlaps, mode);
 
   const isFollowers = mode === 'followers';
   const label = isFollowers ? 'Follower Overlap' : 'Engagement Overlap';
   const sharedCount = isFollowers ? threeWay.follower : threeWay.engagement;
   const jaccard = isFollowers ? threeWay.followerJaccard : threeWay.engagementJaccard;
   const sharedLabel = isFollowers ? 'shared followers' : 'shared engagers';
+  const interp = getInterpretation(jaccard);
+
+  // Compute median new audience from pairwise unique counts
+  const uniqueCounts: number[] = [];
+  for (const po of pairwiseOverlaps) {
+    if (isFollowers) {
+      uniqueCounts.push(po.uniqueFollowers1, po.uniqueFollowers2);
+    } else {
+      uniqueCounts.push(
+        Math.max(0, po.engaged1 - po.engagementOverlap),
+        Math.max(0, po.engaged2 - po.engagementOverlap),
+      );
+    }
+  }
+  uniqueCounts.sort((a, b) => a - b);
+  const medianNewAudience = uniqueCounts.length > 0
+    ? uniqueCounts.length % 2 === 1
+      ? uniqueCounts[Math.floor(uniqueCounts.length / 2)]
+      : Math.round((uniqueCounts[uniqueCounts.length / 2 - 1] + uniqueCounts[uniqueCounts.length / 2]) / 2)
+    : 0;
+
+  const reachOfPct = vennData.uniqueReach > 0
+    ? ((sharedCount / vennData.uniqueReach) * 100).toFixed(1)
+    : '0';
 
   return (
     <div style={{ marginBottom: 24 }}>
       <MultiHeading profiles={threeWay.profiles} totalAccounts={totalAccounts} />
       {totalAccounts > 3 && (
-        <div
-          style={{
-            fontSize: 12,
-            color: 'var(--color-text-faint)',
-            marginBottom: 14,
-            fontStyle: 'italic',
-          }}
-        >
+        <div style={{ fontSize: 12, color: 'var(--color-text-faint)', marginBottom: 14, fontStyle: 'italic' }}>
           Showing 3-way overlap for the first 3 accounts
         </div>
       )}
-      {totalAccounts === 3 && <div style={{ marginBottom: 14 }} />}
+
+      {/* ── Stats bar ─────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 32, marginBottom: 20, marginTop: 12 }}>
+        <div>
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+            {isFollowers ? 'Collaboration reach' : 'Combined engagers'}
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 36, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+            {fmt(vennData.uniqueReach)}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+            vs. {fmt(vennData.totalFollowers)} total {isFollowers ? 'followers' : 'engagers'}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+            {isFollowers ? 'Median new audience' : 'Median new engagers'}
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 36, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+            {fmt(medianNewAudience)}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+            per creator
+          </div>
+        </div>
+        <div style={{ marginLeft: 'auto', paddingTop: 8 }}>
+          <OverlapBadge label={`${interp.label} overlap`} />
+        </div>
+      </div>
+
+      {/* ── Full Venn diagram (no card wrapper) ───────────────────── */}
       <div key={mode} className="venn-animate-in">
-        <VennCard
-          data={vennData}
-          label={label}
-          sharedCount={sharedCount}
-          jaccard={jaccard}
-          sharedLabel={sharedLabel}
-          onDrillDown={() => onDrillDown('three-way', mode)}
-        />
+        <div className="section-label" style={{ marginBottom: 12 }}>{label}</div>
+        <VennDiagram data={vennData} />
+
+        {/* ── Below-Venn stats ──────────────────────────────────── */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
+          gap: 16, marginTop: 20, paddingTop: 16,
+          borderTop: '1px solid var(--color-border)',
+        }}>
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+              {vennData.accounts.length === 3 ? 'Shared by all three' : 'Shared followers'}
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+              {fmt(sharedCount)}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+              {reachOfPct}% of unique reach
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+              Overlap percentage
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: 'var(--color-blue)', lineHeight: 1.1 }}>
+              {jaccard.toFixed(0)}%
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+              {interp.label} overlap
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <button
+              onClick={() => onDrillDown('three-way', mode)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                fontSize: 14, fontWeight: 500, color: 'var(--color-blue)',
+                fontFamily: 'var(--font-sans)',
+              }}
+            >
+              View {isFollowers ? 'followers' : 'engagers'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -795,11 +863,11 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
       {isMulti && sortedPairs.length > 0 && (
         <div style={{ marginBottom: 24 }}>
           <div className="section-label" style={{ marginBottom: 12 }}>
-            Pair Combinations
+            Pairwise Overlaps
           </div>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
             gap: 16,
           }}>
             {sortedPairs.map((o, i) => (

@@ -34,7 +34,7 @@ const MAX_RADIUS = 130;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
 
-function fmt(n: number): string {
+export function fmt(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
   if (n >= 10_000) return (n / 1_000).toFixed(0) + 'K';
   if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
@@ -195,7 +195,7 @@ function solveLayout(data: OverlapData): { circles: Circle[]; svgH: number } {
 
 // ── Venn SVG with legend ────────────────────────────────────────────────────────
 
-function VennDiagram({ data }: { data: OverlapData }) {
+export function VennDiagram({ data }: { data: OverlapData }) {
   const { circles, svgH } = useMemo(() => solveLayout(data), [data]);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [lockedIdx, setLockedIdx] = useState<number | null>(null);

@@ -21,6 +21,8 @@ export type OverlapData = {
   totalFollowers: number;
   homogeneityScore: number; // 0–1
   medianNewAudience?: number;
+  /** Optional per-account color indices into ACCOUNT_COLORS (for pair Venns in multi-account views) */
+  colorIndices?: number[];
 };
 
 // ── Constants ───────────────────────────────────────────────────────────────────
@@ -122,8 +124,8 @@ function solveLayout(data: OverlapData): { circles: Circle[]; svgH: number } {
 
     return {
       circles: [
-        { x: cx - sd / 2, y: cy, r: sr1, handle: data.accounts[0].handle, color: ACCOUNT_COLORS[0] },
-        { x: cx + sd / 2, y: cy, r: sr2, handle: data.accounts[1].handle, color: ACCOUNT_COLORS[1] },
+        { x: cx - sd / 2, y: cy, r: sr1, handle: data.accounts[0].handle, color: ACCOUNT_COLORS[data.colorIndices?.[0] ?? 0] },
+        { x: cx + sd / 2, y: cy, r: sr2, handle: data.accounts[1].handle, color: ACCOUNT_COLORS[data.colorIndices?.[1] ?? 1] },
       ],
       svgH,
     };
@@ -193,7 +195,7 @@ function solveLayout(data: OverlapData): { circles: Circle[]; svgH: number } {
     y: positions[i][1] * scale + offsetY,
     r: clampedRadii[i] * scale,
     handle: a.handle,
-    color: ACCOUNT_COLORS[i],
+    color: ACCOUNT_COLORS[data.colorIndices?.[i] ?? i],
   }));
 
   const maxCy = Math.max(...circles.map(c => c.y + c.r));
@@ -608,8 +610,8 @@ function solveCompactLayout(
     const svgH = cy + Math.max(sr1, sr2) + pad;
     return {
       circles: [
-        { x: cx - sd / 2, y: cy, r: sr1, handle: data.accounts[0].handle, color: ACCOUNT_COLORS[0] },
-        { x: cx + sd / 2, y: cy, r: sr2, handle: data.accounts[1].handle, color: ACCOUNT_COLORS[1] },
+        { x: cx - sd / 2, y: cy, r: sr1, handle: data.accounts[0].handle, color: ACCOUNT_COLORS[data.colorIndices?.[0] ?? 0] },
+        { x: cx + sd / 2, y: cy, r: sr2, handle: data.accounts[1].handle, color: ACCOUNT_COLORS[data.colorIndices?.[1] ?? 1] },
       ],
       svgW: width,
       svgH,
@@ -675,7 +677,7 @@ function solveCompactLayout(
     y: positions[i][1] * scale + offsetY,
     r: clampedRadii[i] * scale,
     handle: a.handle,
-    color: ACCOUNT_COLORS[i],
+    color: ACCOUNT_COLORS[data.colorIndices?.[i] ?? i],
   }));
 
   const maxCy = Math.max(...circles.map(c => c.y + c.r));
@@ -922,6 +924,7 @@ export function threeWayToOverlapData(
 export function pairToOverlapData(
   po: PairwiseOverlapType,
   mode: 'followers' | 'engagement',
+  colorIndices?: [number, number],
 ): OverlapData {
   const isFollowers = mode === 'followers';
   const accounts = [
@@ -951,6 +954,7 @@ export function pairToOverlapData(
     uniqueReach: accounts[0].followerCount + accounts[1].followerCount - shared,
     totalFollowers: accounts[0].followerCount + accounts[1].followerCount,
     homogeneityScore: jaccard,
+    colorIndices,
   };
 }
 

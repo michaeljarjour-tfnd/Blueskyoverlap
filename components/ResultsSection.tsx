@@ -285,17 +285,19 @@ function PairOverlapCards({
   onDrillDown,
   useVenn = true,
   mode,
+  colorIndices,
 }: {
   overlap: PairwiseOverlap;
   onDrillDown: (overlapId: string, type: 'followers' | 'engagement') => void;
   useVenn?: boolean;
   mode: 'followers' | 'engagement';
+  colorIndices?: [number, number];
 }) {
   const profiles = [overlap.account1, overlap.account2];
   const isEstimatedFollowers = overlap.isEstimated;
 
   if (useVenn) {
-    const data = pairToOverlapData(overlap, mode);
+    const data = pairToOverlapData(overlap, mode, colorIndices);
     const isFollowers = mode === 'followers';
     const label = isFollowers
       ? (isEstimatedFollowers ? 'Minimum Follower Overlap' : 'Follower Overlap')
@@ -638,9 +640,9 @@ function ThreeWayOverlapCards({
   return (
     <div style={{ marginBottom: 24 }}>
       <MultiHeading profiles={threeWay.profiles} totalAccounts={totalAccounts} />
-      {totalAccounts > 3 && (
+      {totalAccounts > 5 && (
         <div style={{ fontSize: 12, color: 'var(--color-text-faint)', marginBottom: 14, fontStyle: 'italic' }}>
-          Showing overlap for the first 3 accounts — see pairwise cards below for all {totalAccounts}
+          Showing overlap for the first 5 accounts — see pairwise cards below for all {totalAccounts}
         </div>
       )}
 
@@ -988,7 +990,10 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
           {selectedPair && (() => {
             const sp = selectedPair;
             const isF = vennMode === 'followers';
-            const spData = pairToOverlapData(sp, vennMode);
+            const spIdx1 = profiles.findIndex(p => p.did === sp.account1.did);
+            const spIdx2 = profiles.findIndex(p => p.did === sp.account2.did);
+            const spColors: [number, number] = [spIdx1 >= 0 ? spIdx1 : 0, spIdx2 >= 0 ? spIdx2 : 1];
+            const spData = pairToOverlapData(sp, vennMode, spColors);
             const spLabel = isF
               ? (sp.isEstimated ? 'Minimum Follower Overlap' : 'Follower Overlap')
               : 'Engagement Overlap';

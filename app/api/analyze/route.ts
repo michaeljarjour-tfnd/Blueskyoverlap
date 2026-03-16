@@ -330,77 +330,85 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // ── 4. Three-way overlap (first 3 profiles; cap at 3 for hero display) ──
+        // ── 4. N-way overlap (all profiles, up to 5) ──
         let threeWayOverlap = null;
         if (profiles.length >= 3) {
-            const fs0 = followerSets[0], fs1 = followerSets[1], fs2 = followerSets[2];
-            const es0 = engagementSets[0], es1 = engagementSets[1], es2 = engagementSets[2];
+            const nProfiles = Math.min(profiles.length, 5);
 
-            // Sample three-way intersections
-            const folThreeArr = [...fs0].filter((x) => fs1.has(x) && fs2.has(x));
-            const sampleFolThreeCount = folThreeArr.length;
-            const folUnionSize = new Set([...fs0, ...fs1, ...fs2]).size;
-            const sampleFolJaccard = folUnionSize > 0 ? (sampleFolThreeCount / folUnionSize) * 100 : 0;
+            // N-way follower intersection: filter through all sets
+            let folNArr = [...followerSets[0]];
+            for (let k = 1; k < nProfiles; k++) {
+              folNArr = folNArr.filter((x) => followerSets[k].has(x));
+            }
+            const sampleFolNCount = folNArr.length;
+            const folUnion = new Set<string>();
+            for (let k = 0; k < nProfiles; k++) {
+              for (const x of followerSets[k]) folUnion.add(x);
+            }
+            const folUnionSize = folUnion.size;
+            const sampleFolJaccard = folUnionSize > 0 ? (sampleFolNCount / folUnionSize) * 100 : 0;
 
-            const engThreeArr = [...es0].filter((x) => es1.has(x) && es2.has(x));
-            const engThreeCount = engThreeArr.length;
-            const engUnionSize = new Set([...es0, ...es1, ...es2]).size;
-            const engThreeJaccard = engUnionSize > 0 ? (engThreeCount / engUnionSize) * 100 : 0;
+            // N-way engagement intersection
+            let engNArr = [...engagementSets[0]];
+            for (let k = 1; k < nProfiles; k++) {
+              engNArr = engNArr.filter((x) => engagementSets[k].has(x));
+            }
+            const engNCount = engNArr.length;
+            const engUnion = new Set<string>();
+            for (let k = 0; k < nProfiles; k++) {
+              for (const x of engagementSets[k]) engUnion.add(x);
+            }
+            const engUnionSize = engUnion.size;
+            const engNJaccard = engUnionSize > 0 ? (engNCount / engUnionSize) * 100 : 0;
 
             overlapDetailStore['three-way'] = {
-              followerDids: folThreeArr.slice(0, MAX_OVERLAP_SAMPLE),
-              engagementDids: engThreeArr.slice(0, MAX_OVERLAP_SAMPLE),
+              followerDids: folNArr.slice(0, MAX_OVERLAP_SAMPLE),
+              engagementDids: engNArr.slice(0, MAX_OVERLAP_SAMPLE),
             };
 
-            // Apply blend for low-coverage three-way
-            const realF0 = profiles[0].followersCount ?? fs0.size;
-            const realF1 = profiles[1].followersCount ?? fs1.size;
-            const realF2 = profiles[2].followersCount ?? fs2.size;
-            const cov0 = fs0.size / Math.max(realF0, 1);
-            const cov1 = fs1.size / Math.max(realF1, 1);
-            const cov2 = fs2.size / Math.max(realF2, 1);
-            const avgCoverage = (cov0 + cov1 + cov2) / 3;
+            // Apply blend for low-coverage N-way
+            const realFollowers = profiles.slice(0, nProfiles).map(
+              (p, k) => p.followersCount ?? followerSets[k].size
+            );
+            const coverages = profiles.slice(0, nProfiles).map(
+              (_, k) => followerSets[k].size / Math.max(realFollowers[k], 1)
+            );
+            const avgCoverage = coverages.reduce((s, c) => s + c, 0) / coverages.length;
 
-            let folThreeCount: number;
-            let followerJaccard3: number;
+            let folNCount: number;
+            let followerJaccardN: number;
             let followerPcts: number[];
 
             if (avgCoverage < 0.9) {
               const sJ = sampleFolJaccard / 100;
-              const eJ = engThreeJaccard / 100;
+              const eJ = engNJaccard / 100;
               const blendedJ = avgCoverage * sJ + (1 - avgCoverage) * eJ;
-              const totalFollowers = realF0 + realF1 + realF2;
-              folThreeCount = blendedJ > 0
-                ? Math.round(blendedJ * totalFollowers / (1 + 2 * blendedJ))
+              const totalFollowers = realFollowers.reduce((s, f) => s + f, 0);
+              folNCount = blendedJ > 0
+                ? Math.round(blendedJ * totalFollowers / (1 + (nProfiles - 1) * blendedJ))
                 : 0;
-              followerJaccard3 = blendedJ * 100;
-              followerPcts = [
-                realF0 > 0 ? (folThreeCount / realF0) * 100 : 0,
-                realF1 > 0 ? (folThreeCount / realF1) * 100 : 0,
-                realF2 > 0 ? (folThreeCount / realF2) * 100 : 0,
-              ];
+              followerJaccardN = blendedJ * 100;
+              followerPcts = realFollowers.map(rf =>
+                rf > 0 ? (folNCount / rf) * 100 : 0
+              );
             } else {
-              folThreeCount = sampleFolThreeCount;
-              followerJaccard3 = sampleFolJaccard;
-              followerPcts = [
-                fs0.size > 0 ? (folThreeCount / fs0.size) * 100 : 0,
-                fs1.size > 0 ? (folThreeCount / fs1.size) * 100 : 0,
-                fs2.size > 0 ? (folThreeCount / fs2.size) * 100 : 0,
-              ];
+              folNCount = sampleFolNCount;
+              followerJaccardN = sampleFolJaccard;
+              followerPcts = profiles.slice(0, nProfiles).map((_, k) =>
+                followerSets[k].size > 0 ? (folNCount / followerSets[k].size) * 100 : 0
+              );
             }
 
-            const engagementPcts = [
-              es0.size > 0 ? (engThreeCount / es0.size) * 100 : 0,
-              es1.size > 0 ? (engThreeCount / es1.size) * 100 : 0,
-              es2.size > 0 ? (engThreeCount / es2.size) * 100 : 0,
-            ];
+            const engagementPcts = profiles.slice(0, nProfiles).map((_, k) =>
+              engagementSets[k].size > 0 ? (engNCount / engagementSets[k].size) * 100 : 0
+            );
 
             threeWayOverlap = {
-              follower: folThreeCount,
-              engagement: engThreeCount,
-              followerJaccard: followerJaccard3,
-              engagementJaccard: engThreeJaccard,
-              profiles: [profiles[0], profiles[1], profiles[2]],
+              follower: folNCount,
+              engagement: engNCount,
+              followerJaccard: followerJaccardN,
+              engagementJaccard: engNJaccard,
+              profiles: profiles.slice(0, nProfiles),
               followerPcts,
               engagementPcts,
             };
@@ -585,71 +593,73 @@ async function handlePrefetched(
       }
     }
 
-    // ── 3. Three-way overlap ─────────────────────────────────────────────
+    // ── 3. N-way overlap (all profiles, up to 5) ────────────────────────
     let threeWayOverlap = null;
-    if (n >= 3) {
-      const folKeys = dids.slice(0, 3).map(d => `followers:${d}:${speedTier}`);
-      const engKeys = dids.slice(0, 3).map(d => `engagement:${d}:${speedTier}`);
-      const tmpFol3 = `tmp:${uid}:fol3`;
-      const tmpEng3 = `tmp:${uid}:eng3`;
+    const nProfiles = Math.min(n, 5);
+    if (nProfiles >= 3) {
+      const folKeys = dids.slice(0, nProfiles).map(d => `followers:${d}:${speedTier}`);
+      const engKeys = dids.slice(0, nProfiles).map(d => `engagement:${d}:${speedTier}`);
+      const tmpFolN = `tmp:${uid}:folN`;
+      const tmpEngN = `tmp:${uid}:engN`;
 
-      const threePipe = redis.pipeline();
-      threePipe.sinterstore(tmpFol3, ...folKeys as [string, ...string[]]);
-      threePipe.sinterstore(tmpEng3, ...engKeys as [string, ...string[]]);
-      await threePipe.exec();
+      const nPipe = redis.pipeline();
+      nPipe.sinterstore(tmpFolN, ...folKeys as [string, ...string[]]);
+      nPipe.sinterstore(tmpEngN, ...engKeys as [string, ...string[]]);
+      await nPipe.exec();
 
-      const read3Pipe = redis.pipeline();
-      read3Pipe.scard(tmpFol3);
-      read3Pipe.scard(tmpEng3);
-      read3Pipe.srandmember(tmpFol3, MAX_OVERLAP_SAMPLE);
-      read3Pipe.srandmember(tmpEng3, MAX_OVERLAP_SAMPLE);
-      const read3Results = await read3Pipe.exec();
+      const readNPipe = redis.pipeline();
+      readNPipe.scard(tmpFolN);
+      readNPipe.scard(tmpEngN);
+      readNPipe.srandmember(tmpFolN, MAX_OVERLAP_SAMPLE);
+      readNPipe.srandmember(tmpEngN, MAX_OVERLAP_SAMPLE);
+      const readNResults = await readNPipe.exec();
 
-      await redis.del(tmpFol3, tmpEng3);
+      await redis.del(tmpFolN, tmpEngN);
 
-      const folThreeCount = (read3Results[0] as number) ?? 0;
-      const engThreeCountRaw = (read3Results[1] as number) ?? 0;
-      const folThreeSample = (read3Results[2] as string[]) ?? [];
-      const engThreeSampleRaw = (read3Results[3] as string[]) ?? [];
-      const engThreeSample = engThreeSampleRaw.filter(d => d !== '__empty__');
-      const engThreeCount = engThreeSampleRaw.includes('__empty__')
-        ? Math.max(0, engThreeCountRaw - 1)
-        : engThreeCountRaw;
+      const folNCount = (readNResults[0] as number) ?? 0;
+      const engNCountRaw = (readNResults[1] as number) ?? 0;
+      const folNSample = (readNResults[2] as string[]) ?? [];
+      const engNSampleRaw = (readNResults[3] as string[]) ?? [];
+      const engNSample = engNSampleRaw.filter(d => d !== '__empty__');
+      const engNCount = engNSampleRaw.includes('__empty__')
+        ? Math.max(0, engNCountRaw - 1)
+        : engNCountRaw;
 
       overlapDetailStore['three-way'] = {
-        followerDids: folThreeSample,
-        engagementDids: engThreeSample,
+        followerDids: folNSample,
+        engagementDids: engNSample,
       };
 
-      // Union sizes via inclusion-exclusion:
-      // |A ∪ B ∪ C| = |A| + |B| + |C| - |A∩B| - |A∩C| - |B∩C| + |A∩B∩C|
-      const folUnionSize = folSizes[0] + folSizes[1] + folSizes[2]
-        - (pairFolInter['0:1'] ?? 0)
-        - (pairFolInter['0:2'] ?? 0)
-        - (pairFolInter['1:2'] ?? 0)
-        + folThreeCount;
-      const engUnionSize = engSizes[0] + engSizes[1] + engSizes[2]
-        - (pairEngInter['0:1'] ?? 0)
-        - (pairEngInter['0:2'] ?? 0)
-        - (pairEngInter['1:2'] ?? 0)
-        + engThreeCount;
+      // Union sizes via inclusion-exclusion (approximate for N>3: sum singles - sum pairs + N-way)
+      let folUnionSize = 0;
+      let engUnionSize = 0;
+      for (let k = 0; k < nProfiles; k++) {
+        folUnionSize += folSizes[k];
+        engUnionSize += engSizes[k];
+      }
+      for (let i = 0; i < nProfiles; i++) {
+        for (let j = i + 1; j < nProfiles; j++) {
+          folUnionSize -= (pairFolInter[`${i}:${j}`] ?? 0);
+          engUnionSize -= (pairEngInter[`${i}:${j}`] ?? 0);
+        }
+      }
+      // For N>3 this is an approximation (missing higher-order corrections),
+      // but the N-way intersection from SINTERSTORE is exact
+      folUnionSize = Math.max(folUnionSize, folNCount);
+      engUnionSize = Math.max(engUnionSize, engNCount);
 
       threeWayOverlap = {
-        follower: folThreeCount,
-        engagement: engThreeCount,
-        followerJaccard: folUnionSize > 0 ? (folThreeCount / folUnionSize) * 100 : 0,
-        engagementJaccard: engUnionSize > 0 ? (engThreeCount / engUnionSize) * 100 : 0,
-        profiles: [profiles[0], profiles[1], profiles[2]],
-        followerPcts: [
-          folSizes[0] > 0 ? (folThreeCount / folSizes[0]) * 100 : 0,
-          folSizes[1] > 0 ? (folThreeCount / folSizes[1]) * 100 : 0,
-          folSizes[2] > 0 ? (folThreeCount / folSizes[2]) * 100 : 0,
-        ],
-        engagementPcts: [
-          engSizes[0] > 0 ? (engThreeCount / engSizes[0]) * 100 : 0,
-          engSizes[1] > 0 ? (engThreeCount / engSizes[1]) * 100 : 0,
-          engSizes[2] > 0 ? (engThreeCount / engSizes[2]) * 100 : 0,
-        ],
+        follower: folNCount,
+        engagement: engNCount,
+        followerJaccard: folUnionSize > 0 ? (folNCount / folUnionSize) * 100 : 0,
+        engagementJaccard: engUnionSize > 0 ? (engNCount / engUnionSize) * 100 : 0,
+        profiles: profiles.slice(0, nProfiles),
+        followerPcts: profiles.slice(0, nProfiles).map((_, k) =>
+          folSizes[k] > 0 ? (folNCount / folSizes[k]) * 100 : 0
+        ),
+        engagementPcts: profiles.slice(0, nProfiles).map((_, k) =>
+          engSizes[k] > 0 ? (engNCount / engSizes[k]) * 100 : 0
+        ),
       };
     }
 

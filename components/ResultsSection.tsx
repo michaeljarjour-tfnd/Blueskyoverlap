@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { AnalysisResult, BskyProfile, PairwiseOverlap, ThreeWayOverlap } from '@/lib/types';
 import { getInterpretation, formatFollowers } from '@/lib/analysis/interpret';
 import OverlapDetailModal from './OverlapDetailModal';
-import { VennCard, PairVennHeader, CollaborationRead, threeWayToOverlapData, pairToOverlapData, ACCOUNT_COLORS } from './CollaborationVenn';
+import { VennCard, CollaborationRead, threeWayToOverlapData, pairToOverlapData, ACCOUNT_COLORS } from './CollaborationVenn';
 import type { OverlapData } from './CollaborationVenn';
 
 interface Props {
@@ -371,6 +371,7 @@ function PairCard({
   totalPairs: number;
   profiles: BskyProfile[];
   mode: 'followers' | 'engagement';
+  isSelected?: boolean;
   onSelect: () => void;
 }) {
   const name1 = overlap.account1.displayName || overlap.account1.handle;
@@ -390,20 +391,25 @@ function PairCard({
     <div
       onClick={onSelect}
       style={{
-        background: '#fff',
-        border: '1px solid var(--color-border)',
+        background: isSelected ? '#f0f7ff' : '#fff',
+        border: `2px solid ${isSelected ? 'var(--color-blue)' : 'var(--color-border)'}`,
         borderRadius: 6,
-        padding: '18px 20px',
+        padding: '17px 19px',
         cursor: 'pointer',
-        transition: 'border-color 0.15s, box-shadow 0.15s',
+        transition: 'border-color 0.15s, box-shadow 0.15s, background 0.15s',
+        boxShadow: isSelected ? '0 2px 12px rgba(4,24,43,0.08)' : 'none',
       }}
       onMouseEnter={e => {
-        e.currentTarget.style.borderColor = 'var(--color-blue)';
-        e.currentTarget.style.boxShadow = '0 2px 12px rgba(4,24,43,0.08)';
+        if (!isSelected) {
+          e.currentTarget.style.borderColor = 'var(--color-blue)';
+          e.currentTarget.style.boxShadow = '0 2px 12px rgba(4,24,43,0.08)';
+        }
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.borderColor = 'var(--color-border)';
-        e.currentTarget.style.boxShadow = 'none';
+        if (!isSelected) {
+          e.currentTarget.style.borderColor = 'var(--color-border)';
+          e.currentTarget.style.boxShadow = 'none';
+        }
       }}
     >
       {/* Pair names */}
@@ -718,61 +724,6 @@ function ShareButton({ result }: { result: AnalysisResult }) {
   );
 }
 
-// ── Pair detail modal (shown when clicking a pair card) ───────────────────────
-
-function PairDetailModal({
-  overlap,
-  onDrillDown,
-  onClose,
-  mode,
-}: {
-  overlap: PairwiseOverlap;
-  onDrillDown: (overlapId: string, type: 'followers' | 'engagement') => void;
-  onClose: () => void;
-  mode: 'followers' | 'engagement';
-}) {
-  const name1 = overlap.account1.displayName || overlap.account1.handle;
-  const name2 = overlap.account2.displayName || overlap.account2.handle;
-
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal-box"
-        style={{ maxWidth: 560, padding: '28px 24px', overflow: 'auto' }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20,
-        }}>
-          <h3 style={{
-            fontFamily: 'var(--font-sans)', fontSize: 18, fontWeight: 700,
-            color: 'var(--color-navy)', margin: 0,
-          }}>
-            {name1}{' '}
-            <span style={{ color: 'var(--color-text-faint)', fontWeight: 400 }}>×</span>{' '}
-            {name2}
-          </h3>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: 18, color: 'var(--color-text-faint)', padding: '4px 8px',
-            }}
-          >
-            ✕
-          </button>
-        </div>
-        <PairOverlapCards
-          overlap={overlap}
-          onDrillDown={onDrillDown}
-          useVenn
-          mode={mode}
-        />
-      </div>
-    </div>
-  );
-}
-
 // ── Main results section ───────────────────────────────────────────────────────
 
 export default function ResultsSection({ result, mode = 'live' }: Props) {
@@ -787,8 +738,9 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
   // Lifted toggle state: controls hero Venn AND pair cards
   const [vennMode, setVennMode] = useState<'followers' | 'engagement'>('followers');
 
-  // Selected pair for detail modal (multi-account grid)
-  const [selectedPair, setSelectedPair] = useState<PairwiseOverlap | null>(null);
+  // Selected pair — swaps the hero Venn inline (no modal)
+  const [selectedPairId, setSelectedPairId] = useState<string | null>(null);
+  const selectedPair = selectedPairId ? pairwiseOverlaps.find(p => p.id === selectedPairId) ?? null : null;
 
   const handleDrillDown = (overlapId: string, type: 'followers' | 'engagement') => {
     const detail = overlapDetails?.[overlapId];
@@ -827,8 +779,31 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
         </div>
       )}
 
-      {/* ── Multi-account hero: three-way (or N-way capped at 3) overlap ── */}
-      {isMulti && threeWayOverlap && (
+      {/* ── Multi-account hero: three-way OR selected pair Venn ─────── */}
+      {isMulti && selectedPair ? (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <button
+              onClick={() => setSelectedPairId(null)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 13, color: 'var(--color-blue)', fontWeight: 500,
+                fontFamily: 'var(--font-sans)', padding: 0,
+                display: 'flex', alignItems: 'center', gap: 4,
+              }}
+            >
+              <span style={{ fontSize: 14 }}>&larr;</span> All accounts
+            </button>
+          </div>
+          <PairHeading overlap={selectedPair} />
+          <PairOverlapCards
+            overlap={selectedPair}
+            onDrillDown={handleDrillDown}
+            useVenn={useVenn}
+            mode={vennMode}
+          />
+        </div>
+      ) : isMulti && threeWayOverlap ? (
         <ThreeWayOverlapCards
           threeWay={threeWayOverlap}
           totalAccounts={profiles.length}
@@ -836,7 +811,7 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
           onDrillDown={handleDrillDown}
           mode={vennMode}
         />
-      )}
+      ) : null}
 
       {/* ── Multi-account: pair card grid ──────────────────────────────── */}
       {isMulti && sortedPairs.length > 0 && (
@@ -857,7 +832,8 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
                 totalPairs={sortedPairs.length}
                 profiles={profiles}
                 mode={vennMode}
-                onSelect={() => setSelectedPair(o)}
+                isSelected={selectedPairId === o.id}
+                onSelect={() => setSelectedPairId(prev => prev === o.id ? null : o.id)}
               />
             ))}
           </div>
@@ -883,16 +859,6 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
           ))}
         </div>
       </div>
-
-      {/* ── Pair detail modal (from card grid click) ──────────────────── */}
-      {selectedPair && (
-        <PairDetailModal
-          overlap={selectedPair}
-          onDrillDown={handleDrillDown}
-          onClose={() => setSelectedPair(null)}
-          mode={vennMode}
-        />
-      )}
 
       {/* ── Overlap detail modal ─────────────────────────────────────── */}
       {modalState && (

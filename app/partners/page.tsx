@@ -94,21 +94,30 @@ type Phase = 'idle' | 'loading' | 'results' | 'error' | 'no-cache';
 // ── Topic clustering ────────────────────────────────────────────────────────
 
 const TOPIC_CLUSTERS: Record<string, string[]> = {
-  'Politics & Government': ['Politics', 'Government Accountability', 'Policy', 'National Security', 'Foreign Policy', 'Immigration', 'Labor', 'Criminal Justice', 'Inequality'],
-  'Tech & Science': ['Tech', 'Science', 'Internet Culture', 'Games/Gaming'],
-  'Data Visualization': ['Data Visualization', 'Data', 'Charts', 'Infographics', 'Data Journalism'],
-  'OSINT': ['OSINT', 'Open Source Intelligence', 'Verification', 'Fact-Checking', 'Disinformation', 'Geolocation'],
-  'Business & Finance': ['Finance/Economics', 'Business', 'Personal Finance', 'Real Estate', 'Careers', 'Energy', 'Construction'],
-  'Culture & Arts': ['Culture', 'Entertainment/Hollywood', 'Music', 'Film/Movies', 'Art', 'Books/Writing', 'Photography', 'Design', 'Fashion', 'Comedy', 'Gossip'],
-  'Health & Lifestyle': ['Health/Wellness', 'Mental Health', 'Lifestyle', 'Fitness', 'Self Help', 'Parenting', 'Family', 'Dating/Romance', 'Running'],
-  'Food & Travel': ['Food', 'Restaurants', 'Recipes', 'Bars', 'Travel', 'Things to do', 'Things to Do', 'Outdoors'],
-  'Environment': ['Climate/Environment', 'Agriculture', 'Animals', 'Weather'],
-  'Social Justice': ['Identity/Belonging', 'Gender', 'LGBTQIA', 'Activism', 'Human Rights', 'Faith/Religion'],
-  'Investigative': ['Investigative', 'Law/Legal Issues', 'Crime'],
-  'World & News': ['World', 'General News', 'Explanatory', 'History', 'Media/Power', 'Solutions Journalism', 'Positive News', 'Positive news'],
+  'Politics': ['Politics', 'Government Accountability', 'Policy'],
+  'National Security': ['National Security', 'Foreign Policy'],
+  'Immigration': ['Immigration'],
+  'Labor & Economy': ['Labor', 'Finance/Economics', 'Business', 'Careers', 'Energy', 'Construction'],
+  'Criminal Justice': ['Criminal Justice', 'Crime', 'Law/Legal Issues'],
+  'Tech': ['Tech', 'Internet Culture', 'Games/Gaming', 'AI', 'Artificial Intelligence', 'Cybersecurity', 'Startups', 'Crypto', 'Social Media', 'Software', 'Apps'],
+  'Science': ['Science', 'Space', 'Astronomy', 'Biology', 'Physics', 'Research'],
+  'Data & OSINT': ['Data Visualization', 'Data', 'Charts', 'Infographics', 'Data Journalism', 'OSINT', 'Open Source Intelligence', 'Verification', 'Fact-Checking', 'Disinformation', 'Geolocation'],
+  'Entertainment': ['Entertainment/Hollywood', 'Film/Movies', 'Music', 'Comedy', 'Gossip'],
+  'Books & Writing': ['Books/Writing', 'Art', 'Photography', 'Design'],
+  'Fashion & Style': ['Fashion', 'Culture'],
+  'Health': ['Health/Wellness', 'Mental Health', 'Fitness', 'Running', 'Cancer', 'Diabetes', 'Medical', 'Disability', 'Reproductive Health', 'Public Health', 'Pandemic', 'COVID', 'Nursing', 'Healthcare', 'Drug Policy', 'Addiction', 'Aging'],
+  'Parenting & Family': ['Parenting', 'Family', 'Lifestyle', 'Self Help', 'Dating/Romance'],
+  'Food': ['Food', 'Restaurants', 'Recipes', 'Bars'],
+  'Travel & Outdoors': ['Travel', 'Things to do', 'Things to Do', 'Outdoors'],
+  'Climate & Environment': ['Climate/Environment', 'Agriculture', 'Animals', 'Weather', 'Sustainability', 'Conservation', 'Wildlife', 'Oceans'],
+  'Social Justice': ['Identity/Belonging', 'Inequality', 'Gender', 'LGBTQIA', 'Activism', 'Human Rights'],
+  'Faith & Religion': ['Faith/Religion'],
+  'Investigative': ['Investigative'],
+  'World News': ['World', 'General News', 'Explanatory', 'History', 'Media/Power', 'Solutions Journalism', 'Positive News', 'Positive news'],
   'Local News': ['Local', 'Local News', 'Local news', 'Urban planning', 'Transit/Transportation'],
-  'Sports': ['Sports'],
-  'Education': ['Education'],
+  'Sports': ['Sports', 'NBA', 'NFL', 'MLB', 'Soccer', 'Football', 'Basketball', 'Baseball', 'Hockey', 'Tennis', 'Olympics', 'Esports'],
+  'Education': ['Education', 'Higher Education', 'K-12', 'Teachers', 'Universities', 'Students'],
+  'Personal Finance': ['Personal Finance', 'Real Estate'],
 };
 
 /** Map raw directory topics to consolidated cluster names. */
@@ -139,115 +148,93 @@ function consolidateGeographies(rawGeos: string[]): string[] {
   return Array.from(regions).sort();
 }
 
-const US_STATE_REGIONS: Record<string, string> = {
-  'ny': 'USA — Northeast', 'nj': 'USA — Northeast', 'ct': 'USA — Northeast',
-  'ma': 'USA — Northeast', 'pa': 'USA — Northeast', 'ri': 'USA — Northeast',
-  'vt': 'USA — Northeast', 'nh': 'USA — Northeast', 'me': 'USA — Northeast',
-  'fl': 'USA — Southeast', 'ga': 'USA — Southeast', 'nc': 'USA — Southeast',
-  'sc': 'USA — Southeast', 'va': 'USA — Southeast', 'al': 'USA — Southeast',
-  'ms': 'USA — Southeast', 'tn': 'USA — Southeast', 'la': 'USA — Southeast',
-  'ar': 'USA — Southeast', 'ky': 'USA — Southeast', 'wv': 'USA — Southeast',
-  'il': 'USA — Midwest', 'oh': 'USA — Midwest', 'mi': 'USA — Midwest',
-  'in': 'USA — Midwest', 'wi': 'USA — Midwest', 'mn': 'USA — Midwest',
-  'ia': 'USA — Midwest', 'mo': 'USA — Midwest', 'ks': 'USA — Midwest',
-  'ne': 'USA — Midwest', 'nd': 'USA — Midwest', 'sd': 'USA — Midwest',
-  'tx': 'USA — Southwest', 'ok': 'USA — Southwest', 'nm': 'USA — Southwest',
-  'az': 'USA — Southwest',
-  'ca': 'USA — West', 'or': 'USA — West', 'wa': 'USA — West',
-  'co': 'USA — West', 'nv': 'USA — West', 'ut': 'USA — West',
-  'id': 'USA — West', 'mt': 'USA — West', 'wy': 'USA — West',
-  'hi': 'USA — West', 'ak': 'USA — West',
-  'dc': 'USA — DC/National', 'd.c.': 'USA — DC/National',
-};
-
 function consolidateGeo(raw: string): string {
   const lower = raw.toLowerCase().trim();
-  if (lower.includes('national') && lower.includes('us')) return 'USA — National';
-  if (lower.includes('d.c.') || lower.includes('washington, dc')) return 'USA — DC/National';
-  const cityState = lower.match(/,\s*([a-z]{2})$/);
-  if (cityState) {
-    const region = US_STATE_REGIONS[cityState[1]];
-    if (region) return region;
-  }
-  const stateUS = lower.match(/^(.+?)\s*-\s*us$/);
-  if (stateUS) {
-    const stateAbbrs: Record<string, string> = {
-      'california': 'ca', 'new york': 'ny', 'texas': 'tx', 'florida': 'fl',
-      'illinois': 'il', 'pennsylvania': 'pa', 'ohio': 'oh', 'georgia': 'ga',
-      'north carolina': 'nc', 'michigan': 'mi', 'new jersey': 'nj',
-      'virginia': 'va', 'washington': 'wa', 'massachusetts': 'ma',
-      'arizona': 'az', 'indiana': 'in', 'tennessee': 'tn', 'missouri': 'mo',
-      'maryland': 'md', 'wisconsin': 'wi', 'colorado': 'co', 'minnesota': 'mn',
-      'alabama': 'al', 'louisiana': 'la', 'kentucky': 'ky', 'oregon': 'or',
-      'oklahoma': 'ok', 'connecticut': 'ct', 'iowa': 'ia', 'arkansas': 'ar',
-      'nevada': 'nv', 'mississippi': 'ms', 'kansas': 'ks', 'new mexico': 'nm',
-      'utah': 'ut', 'nebraska': 'ne', 'idaho': 'id', 'hawaii': 'hi',
-      'maine': 'me', 'montana': 'mt', 'rhode island': 'ri', 'delaware': 'de',
-      'south dakota': 'sd', 'north dakota': 'nd', 'alaska': 'ak',
-      'vermont': 'vt', 'wyoming': 'wy', 'west virginia': 'wv',
-      'south carolina': 'sc', 'new hampshire': 'nh',
-    };
-    const abbr = stateAbbrs[stateUS[1].trim()];
-    if (abbr && US_STATE_REGIONS[abbr]) return US_STATE_REGIONS[abbr];
-    return 'USA';
-  }
+
+  // North America: US (any format), Canada, Mexico
+  if (lower.includes('national') && lower.includes('us')) return 'North America';
+  if (lower.includes('d.c.') || lower.includes('washington, dc')) return 'North America';
+  if (lower.match(/,\s*[a-z]{2}$/)) return 'North America'; // "City, ST" format
+  if (lower.match(/^.+?\s*-\s*us$/)) return 'North America'; // "State - US" format
+  if (lower.includes('canada') || lower.includes('mexico')) return 'North America';
+  if (lower === 'us' || lower === 'usa' || lower === 'united states') return 'North America';
+
+  // Europe
+  if (lower.includes('united kingdom') || lower.includes('uk') || lower.includes('england')) return 'Europe';
+  if (lower.includes('france') || lower.includes('germany') || lower.includes('spain')) return 'Europe';
+  if (lower.includes('italy') || lower.includes('netherlands') || lower.includes('ireland')) return 'Europe';
+  if (lower.includes('sweden') || lower.includes('norway') || lower.includes('denmark')) return 'Europe';
+  if (lower.includes('portugal') || lower.includes('belgium') || lower.includes('switzerland')) return 'Europe';
+  if (lower.includes('poland') || lower.includes('austria') || lower.includes('greece')) return 'Europe';
+
+  // Oceania
+  if (lower.includes('australia') || lower.includes('new zealand')) return 'Oceania';
+
+  // Asia
+  if (lower.includes('japan') || lower.includes('china') || lower.includes('india')) return 'Asia';
+  if (lower.includes('korea') || lower.includes('singapore') || lower.includes('hong kong')) return 'Asia';
+
+  // South America
+  if (lower.includes('brazil') || lower.includes('argentina') || lower.includes('colombia')) return 'South America';
+
+  // Africa
+  if (lower.includes('south africa') || lower.includes('nigeria') || lower.includes('kenya')) return 'Africa';
+
   if (lower === 'international') return 'International';
-  if (lower.includes('united kingdom') || lower.includes('uk')) return 'United Kingdom';
-  if (lower.includes('canada')) return 'Canada';
-  if (lower.includes('australia')) return 'Australia';
-  if (lower.includes('france')) return 'France';
-  if (lower.includes('germany')) return 'Germany';
+
   return raw;
 }
 
-/** Normalize user-typed geography to match our region format. */
+/** Normalize user-typed geography to continent. */
 function normalizeUserGeo(input: string): string {
   const lower = input.toLowerCase().trim();
   if (!lower) return '';
 
-  // Common city/country synonyms → regions
-  const cityMap: Record<string, string> = {
-    'new york': 'USA — Northeast', 'nyc': 'USA — Northeast', 'manhattan': 'USA — Northeast',
-    'brooklyn': 'USA — Northeast', 'boston': 'USA — Northeast', 'philly': 'USA — Northeast',
-    'philadelphia': 'USA — Northeast', 'pittsburgh': 'USA — Northeast',
-    'dc': 'USA — DC/National', 'washington dc': 'USA — DC/National',
-    'washington d.c.': 'USA — DC/National', 'washington': 'USA — DC/National',
-    'la': 'USA — West', 'los angeles': 'USA — West', 'san francisco': 'USA — West',
-    'sf': 'USA — West', 'seattle': 'USA — West', 'portland': 'USA — West',
-    'san diego': 'USA — West', 'denver': 'USA — West', 'las vegas': 'USA — West',
-    'chicago': 'USA — Midwest', 'detroit': 'USA — Midwest', 'minneapolis': 'USA — Midwest',
-    'miami': 'USA — Southeast', 'atlanta': 'USA — Southeast', 'charlotte': 'USA — Southeast',
-    'nashville': 'USA — Southeast', 'raleigh': 'USA — Southeast',
-    'dallas': 'USA — Southwest', 'houston': 'USA — Southwest', 'austin': 'USA — Southwest',
-    'san antonio': 'USA — Southwest', 'phoenix': 'USA — Southwest',
-    'london': 'United Kingdom', 'uk': 'United Kingdom', 'england': 'United Kingdom',
-    'paris': 'France', 'berlin': 'Germany', 'munich': 'Germany',
-    'toronto': 'Canada', 'vancouver': 'Canada', 'montreal': 'Canada',
-    'sydney': 'Australia', 'melbourne': 'Australia',
-    'us': 'USA — National', 'usa': 'USA — National', 'united states': 'USA — National',
-    'america': 'USA — National',
+  const continentMap: Record<string, string> = {
+    // North America
+    'new york': 'North America', 'nyc': 'North America', 'manhattan': 'North America',
+    'brooklyn': 'North America', 'boston': 'North America', 'philly': 'North America',
+    'philadelphia': 'North America', 'pittsburgh': 'North America',
+    'dc': 'North America', 'washington dc': 'North America',
+    'washington d.c.': 'North America', 'washington': 'North America',
+    'la': 'North America', 'los angeles': 'North America', 'san francisco': 'North America',
+    'sf': 'North America', 'seattle': 'North America', 'portland': 'North America',
+    'san diego': 'North America', 'denver': 'North America', 'las vegas': 'North America',
+    'chicago': 'North America', 'detroit': 'North America', 'minneapolis': 'North America',
+    'miami': 'North America', 'atlanta': 'North America', 'charlotte': 'North America',
+    'nashville': 'North America', 'raleigh': 'North America',
+    'dallas': 'North America', 'houston': 'North America', 'austin': 'North America',
+    'san antonio': 'North America', 'phoenix': 'North America',
+    'us': 'North America', 'usa': 'North America', 'united states': 'North America',
+    'america': 'North America', 'canada': 'North America', 'toronto': 'North America',
+    'vancouver': 'North America', 'montreal': 'North America', 'mexico': 'North America',
+    // Europe
+    'london': 'Europe', 'uk': 'Europe', 'england': 'Europe', 'united kingdom': 'Europe',
+    'paris': 'Europe', 'france': 'Europe', 'berlin': 'Europe', 'munich': 'Europe',
+    'germany': 'Europe', 'spain': 'Europe', 'italy': 'Europe', 'netherlands': 'Europe',
+    'ireland': 'Europe', 'scotland': 'Europe', 'sweden': 'Europe',
+    // Oceania
+    'sydney': 'Oceania', 'melbourne': 'Oceania', 'australia': 'Oceania',
+    'new zealand': 'Oceania', 'auckland': 'Oceania',
+    // Asia
+    'tokyo': 'Asia', 'japan': 'Asia', 'india': 'Asia', 'singapore': 'Asia',
+    'hong kong': 'Asia', 'korea': 'Asia', 'china': 'Asia',
+    // South America
+    'brazil': 'South America', 'argentina': 'South America', 'colombia': 'South America',
+    // Africa
+    'south africa': 'Africa', 'nigeria': 'Africa', 'kenya': 'Africa',
   };
 
-  if (cityMap[lower]) return cityMap[lower];
+  if (continentMap[lower]) return continentMap[lower];
 
-  // Try state names
-  const stateAbbrs: Record<string, string> = {
-    'california': 'ca', 'new york state': 'ny', 'texas': 'tx', 'florida': 'fl',
-    'illinois': 'il', 'pennsylvania': 'pa', 'ohio': 'oh', 'georgia': 'ga',
-    'north carolina': 'nc', 'michigan': 'mi', 'new jersey': 'nj',
-    'virginia': 'va', 'massachusetts': 'ma', 'arizona': 'az',
-    'tennessee': 'tn', 'colorado': 'co', 'minnesota': 'mn',
-    'oregon': 'or', 'oklahoma': 'ok',
-  };
-  if (stateAbbrs[lower]) {
-    const region = US_STATE_REGIONS[stateAbbrs[lower]];
-    if (region) return region;
-  }
+  // Check if it's already a valid continent
+  const validContinents = ['North America', 'South America', 'Europe', 'Asia', 'Oceania', 'Africa', 'International'];
+  if (validContinents.includes(input)) return input;
 
-  // Check if it's already a valid region
-  if (input.startsWith('USA —') || input === 'International') return input;
+  // Try consolidateGeo for anything else
+  const consolidated = consolidateGeo(input);
+  if (consolidated !== input) return consolidated;
 
-  // Return as-is (the API will also try to normalize)
   return input;
 }
 

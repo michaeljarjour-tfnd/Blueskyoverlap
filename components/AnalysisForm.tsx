@@ -80,7 +80,7 @@ export default function AnalysisForm({ onSubmit, loading }: Props) {
   };
 
   const addHandle = () => {
-    if (handles.length < 10) setHandles((prev) => [...prev, '']);
+    if (handles.length < 5) setHandles((prev) => [...prev, '']);
   };
 
   const removeHandle = (i: number) => {
@@ -257,7 +257,7 @@ export default function AnalysisForm({ onSubmit, loading }: Props) {
         })}
       </div>
 
-      {handles.length < 10 && (
+      {handles.length < 5 && (
         <button
           type="button"
           onClick={addHandle}
@@ -274,7 +274,7 @@ export default function AnalysisForm({ onSubmit, loading }: Props) {
             fontFamily: 'var(--font-sans)',
           }}
         >
-          + Add account ({handles.length}/10)
+          + Add account ({handles.length}/5)
         </button>
       )}
 

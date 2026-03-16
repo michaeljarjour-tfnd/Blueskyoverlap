@@ -140,7 +140,7 @@ function Header() {
           margin: 0,
         }}
       >
-        Find shared audiences based on up to 10 Bluesky accounts.
+        Find shared audiences across up to 5 Bluesky accounts.
       </p>
       <a
         href="/partners"

@@ -827,6 +827,7 @@ export function VennCard({
   jaccard,
   sharedLabel,
   onDrillDown,
+  drillDownDisabled,
 }: {
   data: OverlapData;
   label: string;
@@ -834,6 +835,7 @@ export function VennCard({
   jaccard: number;
   sharedLabel: string;
   onDrillDown?: () => void;
+  drillDownDisabled?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -856,22 +858,29 @@ export function VennCard({
         <MiniVennSvg data={data} width={220} id={label.replace(/\s+/g, '-')} />
         <div style={{ marginTop: 14, display: 'flex', alignItems: 'baseline', gap: 12 }}>
           <button
-            onClick={e => { e.stopPropagation(); onDrillDown?.(); }}
+            onClick={e => { e.stopPropagation(); if (!drillDownDisabled) onDrillDown?.(); }}
+            disabled={drillDownDisabled}
             style={{
-              background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left',
+              background: 'none', border: 'none',
+              cursor: drillDownDisabled ? 'default' : 'pointer',
+              padding: 0, textAlign: 'left',
+              opacity: drillDownDisabled ? 0.4 : 1,
             }}
           >
             <span style={{
               fontSize: 36, fontWeight: 400, fontFamily: 'var(--font-mono)',
-              color: 'var(--color-blue)', letterSpacing: '-0.03em', lineHeight: 1,
+              color: drillDownDisabled ? 'var(--color-text-muted)' : 'var(--color-blue)',
+              letterSpacing: '-0.03em', lineHeight: 1,
             }}>
               {sharedCount.toLocaleString()}
             </span>
             <div style={{
-              fontSize: 11, color: 'var(--color-blue)', fontWeight: 500,
+              fontSize: 11,
+              color: drillDownDisabled ? 'var(--color-text-muted)' : 'var(--color-blue)',
+              fontWeight: 500,
               marginTop: 3, opacity: 0.85, display: 'flex', alignItems: 'center', gap: 3,
             }}>
-              {sharedLabel} <span style={{ fontSize: 10 }}>↗</span>
+              {sharedLabel} {!drillDownDisabled && <span style={{ fontSize: 10 }}>↗</span>}
             </div>
           </button>
           <div>

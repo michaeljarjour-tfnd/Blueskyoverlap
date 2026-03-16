@@ -155,48 +155,55 @@ function OverlapCard({
       </div>
 
       {/* Big clickable number */}
-      <button
-        onClick={onDrillDown}
-        title={`View list of ${sharedLabel}`}
-        style={{
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: 0,
-          textAlign: 'left',
-          display: 'block',
-          marginBottom: 2,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 52,
-            fontWeight: 400,
-            fontFamily: 'var(--font-mono)',
-            color: 'var(--color-blue)',
-            letterSpacing: '-0.03em',
-            lineHeight: 1,
-          }}
-        >
-          {sharedCount.toLocaleString()}
-        </div>
-        <div
-          style={{
-            fontSize: 12,
-            color: 'var(--color-blue)',
-            fontWeight: 500,
-            marginTop: 5,
-            marginBottom: 14,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 3,
-            opacity: 0.85,
-          }}
-        >
-          {sharedLabel}
-          <span style={{ fontSize: 10 }}>↗</span>
-        </div>
-      </button>
+      {(() => {
+        const disabled = sharedCount === 0;
+        return (
+          <button
+            onClick={disabled ? undefined : onDrillDown}
+            disabled={disabled}
+            title={disabled ? undefined : `View list of ${sharedLabel}`}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: disabled ? 'default' : 'pointer',
+              padding: 0,
+              textAlign: 'left',
+              display: 'block',
+              marginBottom: 2,
+              opacity: disabled ? 0.4 : 1,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 52,
+                fontWeight: 400,
+                fontFamily: 'var(--font-mono)',
+                color: disabled ? 'var(--color-text-muted)' : 'var(--color-blue)',
+                letterSpacing: '-0.03em',
+                lineHeight: 1,
+              }}
+            >
+              {sharedCount.toLocaleString()}
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                color: disabled ? 'var(--color-text-muted)' : 'var(--color-blue)',
+                fontWeight: 500,
+                marginTop: 5,
+                marginBottom: 14,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 3,
+                opacity: 0.85,
+              }}
+            >
+              {sharedLabel}
+              {!disabled && <span style={{ fontSize: 10 }}>↗</span>}
+            </div>
+          </button>
+        );
+      })()}
 
       {/* Similarity % */}
       <div
@@ -317,6 +324,7 @@ function PairOverlapCards({
           jaccard={jaccard}
           sharedLabel={sharedLabel}
           onDrillDown={() => onDrillDown(overlap.id, mode)}
+          drillDownDisabled={sharedCount === 0}
         />
       </div>
     );
@@ -728,11 +736,16 @@ function ThreeWayOverlapCards({
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
             <button
-              onClick={() => onDrillDown('three-way', mode)}
+              onClick={sharedCount === 0 ? undefined : () => onDrillDown('three-way', mode)}
+              disabled={sharedCount === 0}
               style={{
-                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                fontSize: 14, fontWeight: 500, color: 'var(--color-blue)',
+                background: 'none', border: 'none',
+                cursor: sharedCount === 0 ? 'default' : 'pointer',
+                padding: 0,
+                fontSize: 14, fontWeight: 500,
+                color: sharedCount === 0 ? 'var(--color-text-muted)' : 'var(--color-blue)',
                 fontFamily: 'var(--font-sans)',
+                opacity: sharedCount === 0 ? 0.4 : 1,
               }}
             >
               View {isFollowers ? 'followers' : 'engagers'}
@@ -952,11 +965,16 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                   <button
-                    onClick={() => handleDrillDown(overlap.id, vennMode)}
+                    onClick={sharedCount === 0 ? undefined : () => handleDrillDown(overlap.id, vennMode)}
+                    disabled={sharedCount === 0}
                     style={{
-                      background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                      fontSize: 14, fontWeight: 500, color: 'var(--color-blue)',
+                      background: 'none', border: 'none',
+                      cursor: sharedCount === 0 ? 'default' : 'pointer',
+                      padding: 0,
+                      fontSize: 14, fontWeight: 500,
+                      color: sharedCount === 0 ? 'var(--color-text-muted)' : 'var(--color-blue)',
                       fontFamily: 'var(--font-sans)',
+                      opacity: sharedCount === 0 ? 0.4 : 1,
                     }}
                   >
                     View {isFollowers ? 'followers' : 'engagers'}
@@ -1109,11 +1127,16 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                       <button
-                        onClick={() => handleDrillDown(sp.id, vennMode)}
+                        onClick={spShared === 0 ? undefined : () => handleDrillDown(sp.id, vennMode)}
+                        disabled={spShared === 0}
                         style={{
-                          background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                          fontSize: 14, fontWeight: 500, color: 'var(--color-blue)',
+                          background: 'none', border: 'none',
+                          cursor: spShared === 0 ? 'default' : 'pointer',
+                          padding: 0,
+                          fontSize: 14, fontWeight: 500,
+                          color: spShared === 0 ? 'var(--color-text-muted)' : 'var(--color-blue)',
                           fontFamily: 'var(--font-sans)',
+                          opacity: spShared === 0 ? 0.4 : 1,
                         }}
                       >
                         View {isF ? 'followers' : 'engagers'}

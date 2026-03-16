@@ -459,42 +459,25 @@ export function CollaborationRead({ data }: { data: OverlapData }) {
   const sorted = [...data.pairwiseOverlap].sort(
     (a, b) => b.jaccardSimilarity - a.jaccardSimilarity
   );
+  const furthest = sorted[sorted.length - 1];
   const closest = sorted[0];
+
+  const getIdx = (handle: string) => data.accounts.findIndex(a => a.handle === handle);
   const getName = (handle: string) => {
     const acct = data.accounts.find(a => a.handle === handle);
     return acct?.displayName || handle;
+  };
+  const getFirst = (handle: string) => getName(handle).split(' ')[0];
+  const colorName = (handle: string) => {
+    const idx = getIdx(handle);
+    return <span style={{ color: ACCOUNT_COLORS[idx] ?? 'var(--color-navy)', fontWeight: 600 }}>{getFirst(handle)}</span>;
   };
 
   const freshReach = data.uniqueReach;
   const biggestAlone = Math.max(...data.accounts.map(a => a.followerCount));
   const netNew = freshReach - biggestAlone;
   const netNewPct = biggestAlone > 0 ? ((netNew / biggestAlone) * 100).toFixed(0) : '0';
-
-  const closestPct = (closest.jaccardSimilarity * 100).toFixed(1);
-
-  let paragraph = '';
-
-  if (closest && closest.sharedFollowers > 0) {
-    paragraph += `${getName(closest.handleA)} and ${getName(closest.handleB)} share the most audience (${closestPct}% Jaccard similarity, ${fmt(closest.sharedFollowers)} followers in common) — they're speaking to much of the same crowd. `;
-  } else if (closest) {
-    paragraph += `${getName(closest.handleA)} and ${getName(closest.handleB)} have no audience overlap — these are completely distinct communities. `;
-  }
-
-  paragraph += `Together, this bundle reaches ${fmt(freshReach)} unique people`;
-
-  if (netNew > 0) {
-    paragraph += `, unlocking ${fmt(netNew)} net new followers (${netNewPct}% more) beyond what the largest account reaches alone. `;
-  } else {
-    paragraph += '. ';
-  }
-
-  if (data.homogeneityScore >= 0.7) {
-    paragraph += `At ${(data.homogeneityScore * 100).toFixed(0)}% homogeneity, this audience already knows each other well — consider whether a bundle adds enough fresh reach.`;
-  } else if (data.homogeneityScore >= 0.4) {
-    paragraph += `With moderate overlap (${(data.homogeneityScore * 100).toFixed(0)}%), there's a healthy balance of shared affinity and fresh reach.`;
-  } else {
-    paragraph += `Low overlap (${(data.homogeneityScore * 100).toFixed(0)}%) means this bundle delivers substantial fresh reach — each account brings a mostly distinct audience.`;
-  }
+  const closestPct = (closest.jaccardSimilarity * 100).toFixed(0);
 
   return (
     <div style={{
@@ -508,7 +491,19 @@ export function CollaborationRead({ data }: { data: OverlapData }) {
       <p style={{
         fontSize: 14, lineHeight: 1.7, color: 'var(--color-navy)', margin: 0,
       }}>
-        {paragraph}
+        This collaboration has the potential to reach <strong>{fmt(freshReach)} followers</strong>
+        {netNew > 0 && <> — {netNewPct}% more than the largest account alone</>}
+        . The tightest relationship is between {colorName(closest.handleA)} and {colorName(closest.handleB)} ({closestPct}% overlap)
+        {closest.sharedFollowers > 0
+          ? <>, suggesting a loyal audience that already follows both. That presents high potential for joint offers</>
+          : <> — these are distinct communities</>
+        }.
+        {furthest && furthest !== closest && (
+          <> {colorName(furthest.handleA === closest.handleA || furthest.handleA === closest.handleB
+            ? furthest.handleB : furthest.handleA)} brings the freshest reach: Their overlap
+            with {colorName(furthest.handleA === closest.handleA || furthest.handleA === closest.handleB
+            ? furthest.handleA : furthest.handleB)} means significant untapped audience for cross-promotion.</>
+        )}
       </p>
     </div>
   );

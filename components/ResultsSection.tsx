@@ -840,18 +840,113 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
       {/* ── Toggle (shown for all views) ──────────────────────────────────── */}
       <VennModeToggle mode={vennMode} onToggle={setVennMode} />
 
-      {/* ── Two-account view: single Venn card ──────────────────────────── */}
-      {isSinglePair && pairwiseOverlaps.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <PairHeading overlap={pairwiseOverlaps[0]} />
-          <PairOverlapCards
-            overlap={pairwiseOverlaps[0]}
-            onDrillDown={handleDrillDown}
-            useVenn={useVenn}
-            mode={vennMode}
-          />
-        </div>
-      )}
+      {/* ── Two-account view: stats bar + full Venn + below-Venn stats ── */}
+      {isSinglePair && pairwiseOverlaps.length > 0 && (() => {
+        const overlap = pairwiseOverlaps[0];
+        const isFollowers = vennMode === 'followers';
+        const vennData = pairToOverlapData(overlap, vennMode);
+        const label = isFollowers
+          ? (overlap.isEstimated ? 'Minimum Follower Overlap' : 'Follower Overlap')
+          : 'Engagement Overlap';
+        const sharedCount = isFollowers ? overlap.followerOverlap : overlap.engagementOverlap;
+        const jaccard = isFollowers ? overlap.followerJaccard : overlap.engagementJaccard;
+        const interp = getInterpretation(jaccard);
+        const sharedLabel = isFollowers
+          ? (overlap.isEstimated ? 'min. shared followers (est.)' : 'shared followers')
+          : 'shared engagers';
+
+        // Unique counts for median new audience
+        const unique1 = isFollowers ? overlap.uniqueFollowers1 : Math.max(0, overlap.engaged1 - overlap.engagementOverlap);
+        const unique2 = isFollowers ? overlap.uniqueFollowers2 : Math.max(0, overlap.engaged2 - overlap.engagementOverlap);
+        const medianNewAudience = Math.round((unique1 + unique2) / 2);
+
+        const reachPct = vennData.uniqueReach > 0
+          ? ((sharedCount / vennData.uniqueReach) * 100).toFixed(1)
+          : '0';
+
+        return (
+          <div style={{ marginBottom: 24 }}>
+            <PairHeading overlap={overlap} />
+
+            {/* Stats bar */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 32, marginBottom: 20 }}>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+                  {isFollowers ? 'Collaboration reach' : 'Combined engagers'}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 36, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+                  {fmt(vennData.uniqueReach)}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                  vs. {fmt(vennData.totalFollowers)} total {isFollowers ? 'followers' : 'engagers'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+                  {isFollowers ? 'Median new audience' : 'Median new engagers'}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 36, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+                  {fmt(medianNewAudience)}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                  per creator
+                </div>
+              </div>
+              <div style={{ marginLeft: 'auto', paddingTop: 8 }}>
+                <OverlapBadge label={`${interp.label} overlap`} />
+              </div>
+            </div>
+
+            {/* Full Venn diagram */}
+            <div key={vennMode} className="venn-animate-in">
+              <div className="section-label" style={{ marginBottom: 12 }}>{label}</div>
+              <VennDiagram data={vennData} countLabel={isFollowers ? 'followers' : 'engagers'} />
+
+              {/* Below-Venn stats */}
+              <div style={{
+                display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
+                gap: 16, marginTop: 20, paddingTop: 16,
+                borderTop: '1px solid var(--color-border)',
+              }}>
+                <div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+                    {sharedLabel.charAt(0).toUpperCase() + sharedLabel.slice(1)}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+                    {fmt(sharedCount)}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                    {reachPct}% of unique reach
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+                    Overlap percentage
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: 'var(--color-blue)', lineHeight: 1.1 }}>
+                    {jaccard.toFixed(0)}%
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                    {interp.label} overlap
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                  <button
+                    onClick={() => handleDrillDown(overlap.id, vennMode)}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                      fontSize: 14, fontWeight: 500, color: 'var(--color-blue)',
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                  >
+                    View {isFollowers ? 'followers' : 'engagers'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Multi-account hero: three-way Venn (always visible) ─────── */}
       {isMulti && threeWayOverlap && (

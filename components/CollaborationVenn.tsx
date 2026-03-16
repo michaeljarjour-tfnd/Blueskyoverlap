@@ -192,29 +192,10 @@ function solveLayout(data: OverlapData): { circles: Circle[]; svgH: number } {
   return { circles, svgH: maxCy + SVG_PAD };
 }
 
-// ── Overlap zone label positions (pairwise only — no triple) ────────────────────
-
-function overlapLabelPositions(circles: Circle[], data: OverlapData) {
-  const labels: { x: number; y: number; text: string }[] = [];
-
-  for (const pair of data.pairwiseOverlap) {
-    const cA = circles.find(c => c.handle === pair.handleA);
-    const cB = circles.find(c => c.handle === pair.handleB);
-    if (!cA || !cB || pair.sharedFollowers === 0) continue;
-
-    const mx = (cA.x + cB.x) / 2;
-    const my = (cA.y + cB.y) / 2;
-    labels.push({ x: mx, y: my, text: fmt(pair.sharedFollowers) });
-  }
-
-  return labels;
-}
-
 // ── Venn SVG with legend ────────────────────────────────────────────────────────
 
 function VennDiagram({ data }: { data: OverlapData }) {
   const { circles, svgH } = useMemo(() => solveLayout(data), [data]);
-  const labels = useMemo(() => overlapLabelPositions(circles, data), [circles, data]);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [lockedIdx, setLockedIdx] = useState<number | null>(null);
   const activeIdx = lockedIdx ?? hoveredIdx;
@@ -237,10 +218,32 @@ function VennDiagram({ data }: { data: OverlapData }) {
       width="100%"
       style={{ maxWidth: SVG_W, display: 'block', margin: '0 auto' }}
     >
-      {/* Drop shadow filters */}
       <defs>
+        {/* Active filters — drop shadow + inner white glow (glossy orb) */}
+        {circles.map((c, i) => {
+          const innerBlur = Math.max(20, c.r * 0.4);
+          return (
+            <filter key={`glow-${i}`} id={`venn-glow-${i}`} x="-50%" y="-50%" width="200%" height="200%">
+              <feFlood floodOpacity="0" result="BackgroundImageFix" />
+              <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
+              <feGaussianBlur stdDeviation="2" />
+              <feComposite in2="hardAlpha" operator="out" />
+              <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.2 0" />
+              <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow" />
+              <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape" />
+              <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
+              <feOffset />
+              <feGaussianBlur stdDeviation={innerBlur} />
+              <feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1" />
+              <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0" />
+              <feBlend mode="normal" in2="shape" result="effect2_innerShadow" />
+            </filter>
+          );
+        })}
+
+        {/* Dimmed filters — drop shadow only, no inner glow */}
         {circles.map((_, i) => (
-          <filter key={`shadow-${i}`} id={`drop-shadow-${i}`} x="-10%" y="-10%" width="120%" height="120%">
+          <filter key={`dim-${i}`} id={`venn-dim-${i}`} x="-10%" y="-10%" width="120%" height="120%">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
             <feGaussianBlur stdDeviation="2" />
@@ -250,56 +253,101 @@ function VennDiagram({ data }: { data: OverlapData }) {
             <feBlend mode="normal" in="SourceGraphic" in2="shadow" result="shape" />
           </filter>
         ))}
+
+        {/* Mask for selected circle */}
+        {activeIdx !== null && (
+          <mask id="venn-sel-mask">
+            <circle
+              cx={circles[activeIdx].x}
+              cy={circles[activeIdx].y}
+              r={circles[activeIdx].r}
+              fill="white"
+              stroke="white"
+            />
+          </mask>
+        )}
       </defs>
 
-      {/* Circle fills — 0.6 opacity with white drop shadow, back-to-front */}
-      {renderOrder.map(i => {
-        const c = circles[i];
-        const dimmed = activeIdx !== null && activeIdx !== i;
-        return (
-          <circle
-            key={`fill-${i}`}
-            cx={c.x}
-            cy={c.y}
-            r={c.r}
-            fill={c.color}
-            fillOpacity={dimmed ? 0.2 : 0.6}
-            filter={`url(#drop-shadow-${i})`}
-            style={{ cursor: 'pointer', transition: 'fill-opacity 0.2s ease' }}
-            onMouseEnter={() => setHoveredIdx(i)}
-            onMouseLeave={() => setHoveredIdx(null)}
-            onClick={() => setLockedIdx(prev => prev === i ? null : i)}
-          />
-        );
-      })}
+      {activeIdx === null ? (
+        /* ── No selection — all circles with inner glow ── */
+        renderOrder.map(i => {
+          const c = circles[i];
+          return (
+            <circle
+              key={`fill-${i}`}
+              cx={c.x} cy={c.y} r={c.r}
+              fill={c.color} fillOpacity={0.6}
+              stroke={c.color} strokeOpacity={0.6} strokeWidth={1}
+              filter={`url(#venn-glow-${i})`}
+              style={{ cursor: 'pointer' }}
+              onMouseEnter={() => setHoveredIdx(i)}
+              onMouseLeave={() => setHoveredIdx(null)}
+              onClick={() => setLockedIdx(prev => prev === i ? null : i)}
+            />
+          );
+        })
+      ) : (
+        <>
+          {/* ── Dimmed layer — all circles faded ── */}
+          <g opacity={0.3}>
+            {renderOrder.map(i => {
+              const c = circles[i];
+              return (
+                <circle
+                  key={`dim-${i}`}
+                  cx={c.x} cy={c.y} r={c.r}
+                  fill={c.color} fillOpacity={0.6}
+                  stroke={c.color} strokeOpacity={0.6} strokeWidth={1}
+                  filter={`url(#venn-dim-${i})`}
+                  style={{ cursor: 'pointer' }}
+                  onMouseEnter={() => setHoveredIdx(i)}
+                  onMouseLeave={() => setHoveredIdx(null)}
+                  onClick={() => setLockedIdx(prev => prev === i ? null : i)}
+                />
+              );
+            })}
+          </g>
 
-      {/* Overlap zones darken naturally from stacked 0.6-opacity circles */}
+          {/* ── Bright layer — masked to selected circle ── */}
+          <g mask="url(#venn-sel-mask)" pointerEvents="none">
+            {renderOrder.map(i => {
+              const c = circles[i];
+              const isSelected = i === activeIdx;
+              return (
+                <g key={`bright-${i}`} opacity={isSelected ? 1 : 0.3}>
+                  <circle
+                    cx={c.x} cy={c.y} r={c.r}
+                    fill={c.color} fillOpacity={0.6}
+                    stroke={c.color} strokeOpacity={0.6} strokeWidth={1}
+                    filter={isSelected ? `url(#venn-glow-${i})` : `url(#venn-dim-${i})`}
+                  />
+                </g>
+              );
+            })}
+          </g>
 
-      {/* Pairwise overlap zone labels */}
-      {labels.map((l, i) => (
-        <g key={`ol-${i}`}>
-          <rect
-            x={l.x - 22}
-            y={l.y - 9}
-            width={44}
-            height={20}
-            rx={4}
-            fill="white"
-            fillOpacity={0.9}
-          />
-          <text
-            x={l.x}
-            y={l.y + 5}
-            textAnchor="middle"
-            fill="var(--color-navy)"
-            fontFamily="var(--font-mono)"
-            fontWeight={600}
-            fontSize={12}
-          >
-            {l.text}
-          </text>
-        </g>
-      ))}
+          {/* ── Badge — follower count near selected circle ── */}
+          {(() => {
+            const c = circles[activeIdx];
+            const text = fmt(data.accounts[activeIdx].followerCount);
+            const badgeW = Math.max(48, text.length * 9 + 18);
+            const badgeX = c.x - badgeW / 2;
+            const badgeY = c.y - c.r - 30;
+            return (
+              <g pointerEvents="none">
+                <rect x={badgeX} y={badgeY} width={badgeW} height={25} rx={4} fill="#04182B" />
+                <text
+                  x={c.x} y={badgeY + 17}
+                  textAnchor="middle" fill="white"
+                  fontFamily="var(--font-mono)" fontWeight={600} fontSize={13}
+                >
+                  {text}
+                </text>
+              </g>
+            );
+          })()}
+        </>
+      )}
 
       {/* Legend — right side, reduced opacity, highlights on hover/tap */}
       {data.accounts.map((acct, i) => {
@@ -625,17 +673,26 @@ export function MiniVennSvg({ data, width = 240, id = '' }: { data: OverlapData;
       style={{ maxWidth: width, display: 'block', margin: '0 auto' }}
     >
       <defs>
-        {circles.map((_, i) => (
-          <filter key={`ms-${id}-${i}`} id={`mini-shadow-${id}-${i}`} x="-10%" y="-10%" width="120%" height="120%">
-            <feFlood floodOpacity="0" result="BackgroundImageFix" />
-            <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
-            <feGaussianBlur stdDeviation="1.5" />
-            <feComposite in2="hardAlpha" operator="out" />
-            <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.2 0" />
-            <feBlend mode="normal" in2="BackgroundImageFix" result="shadow" />
-            <feBlend mode="normal" in="SourceGraphic" in2="shadow" result="shape" />
-          </filter>
-        ))}
+        {circles.map((c, i) => {
+          const innerBlur = Math.max(10, c.r * 0.35);
+          return (
+            <filter key={`ms-${id}-${i}`} id={`mini-shadow-${id}-${i}`} x="-50%" y="-50%" width="200%" height="200%">
+              <feFlood floodOpacity="0" result="BackgroundImageFix" />
+              <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
+              <feGaussianBlur stdDeviation="1.5" />
+              <feComposite in2="hardAlpha" operator="out" />
+              <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.2 0" />
+              <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow" />
+              <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape" />
+              <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
+              <feOffset />
+              <feGaussianBlur stdDeviation={innerBlur} />
+              <feComposite in2="hardAlpha" operator="arithmetic" k2="-1" k3="1" />
+              <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0" />
+              <feBlend mode="normal" in2="shape" result="effect2_innerShadow" />
+            </filter>
+          );
+        })}
       </defs>
       {renderOrder.map(i => {
         const c = circles[i];
@@ -644,6 +701,7 @@ export function MiniVennSvg({ data, width = 240, id = '' }: { data: OverlapData;
             key={`mf-${i}`}
             cx={c.x} cy={c.y} r={c.r}
             fill={c.color} fillOpacity={0.6}
+            stroke={c.color} strokeOpacity={0.6} strokeWidth={1}
             filter={`url(#mini-shadow-${id}-${i})`}
           />
         );

@@ -207,8 +207,29 @@ function solveLayout(data: OverlapData): { circles: Circle[]; svgH: number } {
 export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapData; countLabel?: string }) {
   const { circles, svgH } = useMemo(() => solveLayout(data), [data]);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
-  const [lockedIdx, setLockedIdx] = useState<number | null>(null);
-  const activeIdx = lockedIdx ?? hoveredIdx;
+  const [lockedSet, setLockedSet] = useState<Set<number>>(new Set());
+
+  // Active set: locked circles, or just hovered if nothing locked
+  const activeSet = useMemo(() => {
+    if (lockedSet.size > 0) return lockedSet;
+    if (hoveredIdx !== null) return new Set([hoveredIdx]);
+    return new Set<number>();
+  }, [lockedSet, hoveredIdx]);
+
+  const handleCircleClick = (i: number, e: React.MouseEvent) => {
+    if (e.shiftKey) {
+      // Shift+click: toggle in/out of selection
+      setLockedSet(prev => {
+        const next = new Set(prev);
+        if (next.has(i)) next.delete(i);
+        else next.add(i);
+        return next;
+      });
+    } else {
+      // Regular click: solo select / deselect
+      setLockedSet(prev => prev.size === 1 && prev.has(i) ? new Set() : new Set([i]));
+    }
+  };
 
   // Render order: reverse so pink (index 0) paints last = front
   const renderOrder = useMemo(() => {
@@ -257,22 +278,25 @@ export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapD
           </filter>
         ))}
 
-        {/* Mask for selected circle */}
-        {activeIdx !== null && (
+        {/* Mask for selected circle(s) */}
+        {activeSet.size > 0 && (
           <mask id="venn-sel-mask">
-            <circle
-              cx={circles[activeIdx].x}
-              cy={circles[activeIdx].y}
-              r={circles[activeIdx].r}
-              fill="white"
-              stroke="white"
-            />
+            {Array.from(activeSet).map(idx => (
+              <circle
+                key={`mask-${idx}`}
+                cx={circles[idx].x}
+                cy={circles[idx].y}
+                r={circles[idx].r}
+                fill="white"
+                stroke="white"
+              />
+            ))}
           </mask>
         )}
       </defs>
 
-      {activeIdx === null ? (
-        /* ── No selection — all circles with inner glow ── */
+      {activeSet.size === 0 ? (
+        /* ── No selection — all circles normal ── */
         renderOrder.map(i => {
           const c = circles[i];
           return (
@@ -285,7 +309,7 @@ export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapD
               style={{ cursor: 'pointer' }}
               onMouseEnter={() => setHoveredIdx(i)}
               onMouseLeave={() => setHoveredIdx(null)}
-              onClick={() => setLockedIdx(prev => prev === i ? null : i)}
+              onClick={(e) => handleCircleClick(i, e)}
             />
           );
         })
@@ -305,17 +329,17 @@ export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapD
                   style={{ cursor: 'pointer' }}
                   onMouseEnter={() => setHoveredIdx(i)}
                   onMouseLeave={() => setHoveredIdx(null)}
-                  onClick={() => setLockedIdx(prev => prev === i ? null : i)}
+                  onClick={(e) => handleCircleClick(i, e)}
                 />
               );
             })}
           </g>
 
-          {/* ── Bright layer — masked to selected circle ── */}
+          {/* ── Bright layer — masked to selected circle(s) ── */}
           <g mask="url(#venn-sel-mask)" pointerEvents="none">
             {renderOrder.map(i => {
               const c = circles[i];
-              const isSelected = i === activeIdx;
+              const isSelected = activeSet.has(i);
               return (
                 <g key={`bright-${i}`} opacity={isSelected ? 1 : 0.3}>
                   <circle
@@ -329,15 +353,15 @@ export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapD
             })}
           </g>
 
-          {/* ── Badge — follower count near selected circle ── */}
-          {(() => {
-            const c = circles[activeIdx];
-            const text = fmt(data.accounts[activeIdx].followerCount);
+          {/* ── Badges — follower count near each selected circle ── */}
+          {Array.from(activeSet).map(idx => {
+            const c = circles[idx];
+            const text = fmt(data.accounts[idx].followerCount);
             const badgeW = Math.max(48, text.length * 9 + 18);
             const badgeX = c.x - badgeW / 2;
             const badgeY = c.y - c.r - 30;
             return (
-              <g pointerEvents="none">
+              <g key={`badge-${idx}`} pointerEvents="none">
                 <rect x={badgeX} y={badgeY} width={badgeW} height={25} rx={4} fill="#04182B" />
                 <text
                   x={c.x} y={badgeY + 17}
@@ -348,7 +372,7 @@ export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapD
                 </text>
               </g>
             );
-          })()}
+          })}
         </>
       )}
 
@@ -356,8 +380,8 @@ export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapD
       {data.accounts.map((acct, i) => {
         const y = legendStartY + i * legendItemH;
         const color = circles[i]?.color ?? ACCOUNT_COLORS[data.colorIndices?.[i] ?? i];
-        const isActive = activeIdx === i;
-        const legendOpacity = activeIdx === null ? 0.5 : isActive ? 1 : 0.3;
+        const isActive = activeSet.has(i);
+        const legendOpacity = activeSet.size === 0 ? 0.5 : isActive ? 1 : 0.3;
         return (
           <g
             key={`legend-${i}`}
@@ -365,7 +389,7 @@ export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapD
             opacity={legendOpacity}
             onMouseEnter={() => setHoveredIdx(i)}
             onMouseLeave={() => setHoveredIdx(null)}
-            onClick={() => setLockedIdx(prev => prev === i ? null : i)}
+            onClick={(e) => handleCircleClick(i, e)}
           >
             <circle cx={legendX + 7} cy={y + 10} r={7} fill={color} fillOpacity={0.8} />
             <text
@@ -373,7 +397,7 @@ export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapD
               y={y + 8}
               fill="var(--color-navy)"
               fontFamily="var(--font-sans)"
-              fontWeight={isActive ? 700 : 600}
+              fontWeight={isActive ? 700 : 500}
               fontSize={13}
             >
               {acct.displayName || acct.handle}

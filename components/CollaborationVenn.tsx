@@ -258,7 +258,7 @@ export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapD
             <feOffset />
             <feGaussianBlur stdDeviation="3.5" />
             <feComposite in2="hardAlpha" operator="out" />
-            <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.3 0" />
+            <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.1 0" />
             <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow" />
             <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape" />
           </filter>
@@ -272,7 +272,7 @@ export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapD
             <feOffset />
             <feGaussianBlur stdDeviation="3.5" />
             <feComposite in2="hardAlpha" operator="out" />
-            <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.06 0" />
+            <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.1 0" />
             <feBlend mode="normal" in2="BackgroundImageFix" result="shadow" />
             <feBlend mode="normal" in="SourceGraphic" in2="shadow" result="shape" />
           </filter>
@@ -796,7 +796,7 @@ export function MiniVennSvg({ data, width = 240, id = '' }: { data: OverlapData;
             <feOffset />
             <feGaussianBlur stdDeviation="3.5" />
             <feComposite in2="hardAlpha" operator="out" />
-            <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.3 0" />
+            <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.1 0" />
             <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow" />
             <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape" />
           </filter>

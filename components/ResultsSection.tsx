@@ -984,31 +984,123 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
             ))}
           </div>
 
-          {/* ── Inline selected pair Venn (below grid) ──────────────── */}
-          {selectedPair && (
-            <div className="venn-animate-in" style={{ marginTop: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <button
-                  onClick={() => setSelectedPairId(null)}
-                  style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    fontSize: 13, color: 'var(--color-blue)', fontWeight: 500,
-                    fontFamily: 'var(--font-sans)', padding: 0,
-                    display: 'flex', alignItems: 'center', gap: 4,
-                  }}
-                >
-                  <span style={{ fontSize: 14 }}>&larr;</span> Back to overview
-                </button>
+          {/* ── Inline selected pair detail (below grid) ─────────── */}
+          {selectedPair && (() => {
+            const sp = selectedPair;
+            const isF = vennMode === 'followers';
+            const spData = pairToOverlapData(sp, vennMode);
+            const spLabel = isF
+              ? (sp.isEstimated ? 'Minimum Follower Overlap' : 'Follower Overlap')
+              : 'Engagement Overlap';
+            const spShared = isF ? sp.followerOverlap : sp.engagementOverlap;
+            const spJaccard = isF ? sp.followerJaccard : sp.engagementJaccard;
+            const spInterp = getInterpretation(spJaccard);
+            const spSharedLabel = isF
+              ? (sp.isEstimated ? 'min. shared followers (est.)' : 'shared followers')
+              : 'shared engagers';
+            const spUnique1 = isF ? sp.uniqueFollowers1 : Math.max(0, sp.engaged1 - sp.engagementOverlap);
+            const spUnique2 = isF ? sp.uniqueFollowers2 : Math.max(0, sp.engaged2 - sp.engagementOverlap);
+            const spMedian = Math.round((spUnique1 + spUnique2) / 2);
+            const spReachPct = spData.uniqueReach > 0
+              ? ((spShared / spData.uniqueReach) * 100).toFixed(1) : '0';
+
+            return (
+              <div className="venn-animate-in" style={{ marginTop: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                  <button
+                    onClick={() => setSelectedPairId(null)}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      fontSize: 13, color: 'var(--color-blue)', fontWeight: 500,
+                      fontFamily: 'var(--font-sans)', padding: 0,
+                      display: 'flex', alignItems: 'center', gap: 4,
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>&larr;</span> Back to overview
+                  </button>
+                </div>
+
+                <PairHeading overlap={sp} />
+
+                {/* Stats bar */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 32, marginBottom: 20 }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+                      {isF ? 'Collaboration reach' : 'Combined engagers'}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 36, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+                      {fmt(spData.uniqueReach)}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                      vs. {fmt(spData.totalFollowers)} total {isF ? 'followers' : 'engagers'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+                      {isF ? 'Median new audience' : 'Median new engagers'}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 36, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+                      {fmt(spMedian)}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                      per creator
+                    </div>
+                  </div>
+                  <div style={{ marginLeft: 'auto', paddingTop: 8 }}>
+                    <OverlapBadge label={`${spInterp.label} overlap`} />
+                  </div>
+                </div>
+
+                {/* Full Venn diagram */}
+                <div key={vennMode} className="venn-animate-in">
+                  <div className="section-label" style={{ marginBottom: 12 }}>{spLabel}</div>
+                  <VennDiagram data={spData} countLabel={isF ? 'followers' : 'engagers'} />
+
+                  {/* Below-Venn stats */}
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
+                    gap: 16, marginTop: 20, paddingTop: 16,
+                    borderTop: '1px solid var(--color-border)',
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+                        {spSharedLabel.charAt(0).toUpperCase() + spSharedLabel.slice(1)}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+                        {fmt(spShared)}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                        {spReachPct}% of unique reach
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+                        Overlap percentage
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
+                        {spJaccard.toFixed(0)}%
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                        {spInterp.label} overlap
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                      <button
+                        onClick={() => handleDrillDown(sp.id, vennMode)}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                          fontSize: 14, fontWeight: 500, color: 'var(--color-blue)',
+                          fontFamily: 'var(--font-sans)',
+                        }}
+                      >
+                        View {isF ? 'followers' : 'engagers'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <PairHeading overlap={selectedPair} />
-              <PairOverlapCards
-                overlap={selectedPair}
-                onDrillDown={handleDrillDown}
-                useVenn={useVenn}
-                mode={vennMode}
-              />
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
 

@@ -780,31 +780,8 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
         </div>
       )}
 
-      {/* ── Multi-account hero: three-way OR selected pair Venn ─────── */}
-      {isMulti && selectedPair ? (
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <button
-              onClick={() => setSelectedPairId(null)}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: 13, color: 'var(--color-blue)', fontWeight: 500,
-                fontFamily: 'var(--font-sans)', padding: 0,
-                display: 'flex', alignItems: 'center', gap: 4,
-              }}
-            >
-              <span style={{ fontSize: 14 }}>&larr;</span> All accounts
-            </button>
-          </div>
-          <PairHeading overlap={selectedPair} />
-          <PairOverlapCards
-            overlap={selectedPair}
-            onDrillDown={handleDrillDown}
-            useVenn={useVenn}
-            mode={vennMode}
-          />
-        </div>
-      ) : isMulti && threeWayOverlap ? (
+      {/* ── Multi-account hero: three-way Venn (always visible) ─────── */}
+      {isMulti && threeWayOverlap && (
         <ThreeWayOverlapCards
           threeWay={threeWayOverlap}
           totalAccounts={profiles.length}
@@ -812,7 +789,7 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
           onDrillDown={handleDrillDown}
           mode={vennMode}
         />
-      ) : null}
+      )}
 
       {/* ── Multi-account: pair card grid ──────────────────────────────── */}
       {isMulti && sortedPairs.length > 0 && (
@@ -838,6 +815,32 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
               />
             ))}
           </div>
+
+          {/* ── Inline selected pair Venn (below grid) ──────────────── */}
+          {selectedPair && (
+            <div className="venn-animate-in" style={{ marginTop: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <button
+                  onClick={() => setSelectedPairId(null)}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontSize: 13, color: 'var(--color-blue)', fontWeight: 500,
+                    fontFamily: 'var(--font-sans)', padding: 0,
+                    display: 'flex', alignItems: 'center', gap: 4,
+                  }}
+                >
+                  <span style={{ fontSize: 14 }}>&larr;</span> Back to overview
+                </button>
+              </div>
+              <PairHeading overlap={selectedPair} />
+              <PairOverlapCards
+                overlap={selectedPair}
+                onDrillDown={handleDrillDown}
+                useVenn={useVenn}
+                mode={vennMode}
+              />
+            </div>
+          )}
         </div>
       )}
 

@@ -609,8 +609,26 @@ function ThreeWayOverlapCards({
 
   const isFollowers = mode === 'followers';
   const label = isFollowers ? 'Follower Overlap' : 'Engagement Overlap';
-  const sharedCount = isFollowers ? threeWay.follower : threeWay.engagement;
-  const jaccard = isFollowers ? threeWay.followerJaccard : threeWay.engagementJaccard;
+  const nWayCount = isFollowers ? threeWay.follower : threeWay.engagement;
+  const nWayJaccard = isFollowers ? threeWay.followerJaccard : threeWay.engagementJaccard;
+  const nAccounts = threeWay.profiles.length;
+
+  // For 4+ accounts, N-way intersection is often 0 — show avg pairwise instead
+  const filteredPairs = pairwiseOverlaps.filter(po =>
+    threeWay.profiles.some(p => p.did === po.account1.did) &&
+    threeWay.profiles.some(p => p.did === po.account2.did)
+  );
+  const avgPairwiseOverlap = filteredPairs.length > 0
+    ? Math.round(filteredPairs.reduce((s, po) => s + (isFollowers ? po.followerOverlap : po.engagementOverlap), 0) / filteredPairs.length)
+    : 0;
+  const avgPairwiseJaccard = filteredPairs.length > 0
+    ? filteredPairs.reduce((s, po) => s + (isFollowers ? po.followerJaccard : po.engagementJaccard), 0) / filteredPairs.length
+    : 0;
+
+  // Use N-way for 3 accounts, avg pairwise for 4+
+  const useAvgPairwise = nAccounts >= 4;
+  const sharedCount = useAvgPairwise ? avgPairwiseOverlap : nWayCount;
+  const jaccard = useAvgPairwise ? avgPairwiseJaccard : nWayJaccard;
   const sharedLabel = isFollowers ? 'shared followers' : 'shared engagers';
   const interp = getInterpretation(jaccard);
 
@@ -688,13 +706,13 @@ function ThreeWayOverlapCards({
         }}>
           <div>
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
-              {vennData.accounts.length >= 3 ? `Shared by all ${vennData.accounts.length}` : 'Shared followers'}
+              {useAvgPairwise ? 'Avg. pairwise overlap' : vennData.accounts.length >= 3 ? `Shared by all ${vennData.accounts.length}` : 'Shared followers'}
             </div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
               {fmt(sharedCount)}
             </div>
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
-              {reachOfPct}% of unique reach
+              {useAvgPairwise ? `across ${filteredPairs.length} pairs` : `${reachOfPct}% of unique reach`}
             </div>
           </div>
           <div>

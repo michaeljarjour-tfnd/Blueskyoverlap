@@ -640,7 +640,7 @@ function ThreeWayOverlapCards({
       <MultiHeading profiles={threeWay.profiles} totalAccounts={totalAccounts} />
       {totalAccounts > 3 && (
         <div style={{ fontSize: 12, color: 'var(--color-text-faint)', marginBottom: 14, fontStyle: 'italic' }}>
-          Showing 3-way overlap for the first 3 accounts
+          Showing overlap for the first 3 accounts — see pairwise cards below for all {totalAccounts}
         </div>
       )}
 
@@ -686,7 +686,7 @@ function ThreeWayOverlapCards({
         }}>
           <div>
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
-              {vennData.accounts.length === 3 ? 'Shared by all three' : 'Shared followers'}
+              {vennData.accounts.length >= 3 ? `Shared by all ${vennData.accounts.length}` : 'Shared followers'}
             </div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: 'var(--color-navy)', lineHeight: 1.1 }}>
               {fmt(sharedCount)}
@@ -825,7 +825,7 @@ export default function ResultsSection({ result, mode = 'live' }: Props) {
 
   const isSinglePair = profiles.length === 2;
   const isMulti = profiles.length >= 3;
-  const useVenn = profiles.length <= 3;
+  const useVenn = profiles.length <= 5;
 
   // Sort pairs by follower Jaccard descending (done once, stable)
   const sortedPairs = [...pairwiseOverlaps].sort((a, b) => {

@@ -25,7 +25,7 @@ export type OverlapData = {
 
 // ── Constants ───────────────────────────────────────────────────────────────────
 
-export const ACCOUNT_COLORS = ['#FF007B', '#00DDFF', '#009DFF'];
+export const ACCOUNT_COLORS = ['#FF007B', '#00DDFF', '#009DFF', '#FF0004', '#00FF9D'];
 const SVG_W = 680;
 const VENN_W = 440; // narrower to leave room for legend
 const SVG_PAD = 40;
@@ -129,14 +129,14 @@ function solveLayout(data: OverlapData): { circles: Circle[]; svgH: number } {
     };
   }
 
-  // 3 accounts: force-directed approach
+  // 3+ accounts: force-directed approach with N-gon initial positions
   const cx = VENN_W / 2;
-  const startR = 100;
-  const positions: [number, number][] = [
-    [cx, SVG_PAD + MAX_RADIUS],
-    [cx - startR * Math.cos(Math.PI / 6), SVG_PAD + MAX_RADIUS + startR * Math.sin(Math.PI / 6) + startR],
-    [cx + startR * Math.cos(Math.PI / 6), SVG_PAD + MAX_RADIUS + startR * Math.sin(Math.PI / 6) + startR],
-  ];
+  const cy0 = SVG_PAD + MAX_RADIUS + 60;
+  const startR = Math.min(100, MAX_RADIUS * 0.8);
+  const positions: [number, number][] = Array.from({ length: n }, (_, i) => {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    return [cx + startR * Math.cos(angle), cy0 + startR * Math.sin(angle)] as [number, number];
+  });
 
   const pairs: { i: number; j: number; targetD: number }[] = [];
   for (let i = 0; i < n; i++) {
@@ -429,10 +429,10 @@ function SummaryStats({ data }: { data: OverlapData }) {
         padding: '20px 24px',
       }}>
         <div className="metric-label">
-          {data.accounts.length === 3 ? 'Shared by All Three' : 'Shared Followers'}
+          {data.accounts.length >= 3 ? `Shared by All ${data.accounts.length}` : 'Shared Followers'}
         </div>
         <div className="metric-value">
-          {data.accounts.length === 3 && data.tripleOverlap != null
+          {data.accounts.length >= 3 && data.tripleOverlap != null
             ? fmt(data.tripleOverlap)
             : fmt(data.pairwiseOverlap[0]?.sharedFollowers ?? 0)}
         </div>
@@ -616,14 +616,14 @@ function solveCompactLayout(
     };
   }
 
-  // 3 accounts
+  // 3+ accounts: N-gon initial positions
   const cx = width / 2;
-  const startR = maxR * 0.7;
-  const positions: [number, number][] = [
-    [cx, pad + maxR],
-    [cx - startR * Math.cos(Math.PI / 6), pad + maxR + startR * Math.sin(Math.PI / 6) + startR],
-    [cx + startR * Math.cos(Math.PI / 6), pad + maxR + startR * Math.sin(Math.PI / 6) + startR],
-  ];
+  const cy0 = pad + maxR + maxR * 0.5;
+  const startR2 = maxR * 0.7;
+  const positions: [number, number][] = Array.from({ length: n }, (_, i) => {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    return [cx + startR2 * Math.cos(angle), cy0 + startR2 * Math.sin(angle)] as [number, number];
+  });
 
   const pairs: { i: number; j: number; targetD: number }[] = [];
   for (let i = 0; i < n; i++) {

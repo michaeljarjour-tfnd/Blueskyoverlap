@@ -388,6 +388,11 @@ function PairCard({
   const color1 = ACCOUNT_COLORS[idx1] ?? ACCOUNT_COLORS[0];
   const color2 = ACCOUNT_COLORS[idx2] ?? ACCOUNT_COLORS[1];
 
+  // Visual bar width: rank-based so differences are visible
+  // rank 0 (closest) = 100%, last (furthest) = 25%, others interpolate
+  const barPct = totalPairs <= 1 ? 100
+    : 100 - (rank / (totalPairs - 1)) * 75;
+
   return (
     <div
       onClick={onSelect}
@@ -437,7 +442,7 @@ function PairCard({
           overflow: 'hidden',
         }}>
           <div style={{
-            width: `${Math.min(pct, 100)}%`,
+            width: `${barPct}%`,
             height: '100%',
             borderRadius: 4,
             background: `linear-gradient(to right, ${color1}, ${color2})`,

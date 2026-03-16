@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
 // ── Data shape ──────────────────────────────────────────────────────────────────
 
@@ -465,12 +465,14 @@ function SummaryStats({ data }: { data: OverlapData }) {
 // ── Collaboration Read ──────────────────────────────────────────────────────────
 
 export function CollaborationRead({ data }: { data: OverlapData }) {
+  const n = data.accounts.length;
   const sorted = [...data.pairwiseOverlap].sort(
     (a, b) => b.jaccardSimilarity - a.jaccardSimilarity,
   );
   const closest = sorted[0];
   const furthest = sorted[sorted.length - 1];
 
+  // ── Helpers ──
   const getIdx = (handle: string) => data.accounts.findIndex(a => a.handle === handle);
   const getFirst = (handle: string) => {
     const acct = data.accounts.find(a => a.handle === handle);
@@ -486,31 +488,82 @@ export function CollaborationRead({ data }: { data: OverlapData }) {
     );
   };
 
+  // ── Metrics ──
   const freshReach = data.uniqueReach;
   const biggestAlone = Math.max(...data.accounts.map(a => a.followerCount));
   const smallestAlone = Math.min(...data.accounts.map(a => a.followerCount));
   const netNew = freshReach - biggestAlone;
   const netNewPct = biggestAlone > 0 ? ((netNew / biggestAlone) * 100).toFixed(0) : '0';
-  const closestPct = (closest.jaccardSimilarity * 100).toFixed(0);
-  const furthestPct = (furthest.jaccardSimilarity * 100).toFixed(0);
-  const closestJaccard = closest.jaccardSimilarity * 100; // 0–100 scale
 
-  // Tier-based relationship characterization
-  const relationshipCopy = closestJaccard > 40
-    ? <>{colorName(closest.handleA)} and {colorName(closest.handleB)} share {closestPct}% of their audience — a deeply overlapping community. A collaboration here is more about deepening loyalty than expanding reach</>
-    : closestJaccard > 20
-    ? <>{colorName(closest.handleA)} and {colorName(closest.handleB)} share a significant audience ({closestPct}% overlap), which means strong social proof for joint projects, though fresh reach is limited</>
-    : closestJaccard > 10
-    ? <>{colorName(closest.handleA)} and {colorName(closest.handleB)} have a meaningful crossover ({closestPct}% overlap) — enough shared trust to reduce friction, with plenty of new audience on both sides</>
-    : closestJaccard > 3
-    ? <>{colorName(closest.handleA)} and {colorName(closest.handleB)} have a small but real overlap ({closestPct}% overlap) — mostly separate audiences, which means strong potential for cross-promotion</>
-    : <>{colorName(closest.handleA)} and {colorName(closest.handleB)} have almost entirely separate audiences ({closestPct}% overlap) — a collaboration would introduce each to a genuinely fresh community</>;
+  // Average Jaccard across all pairs (group-level characterization)
+  const avgJaccard = sorted.length > 0
+    ? (sorted.reduce((s, p) => s + p.jaccardSimilarity, 0) / sorted.length) * 100
+    : 0;
 
-  // Furthest pair (multi-account only, when there's a meaningful gap)
+  // ── S1: Reach statement (personalized for 2 accounts) ──
+  const reachCopy = n === 2
+    ? <>{colorName(data.accounts[0].handle)} and {colorName(data.accounts[1].handle)} together can reach <strong>{fmt(freshReach)} unique people</strong>{netNew > 0 && <> — {netNewPct}% more than {colorName(data.accounts[biggestAlone === data.accounts[0].followerCount ? 0 : 1].handle)} alone</>}</>
+    : <>Together, these {n} accounts can reach <strong>{fmt(freshReach)} unique people</strong>{netNew > 0 && <> — {netNewPct}% more than the largest account alone</>}</>;
+
+  // ── S2: Group dynamic (tiered by average Jaccard) ──
+  const groupCopy = n === 2
+    // For pairs, characterize the single relationship directly
+    ? (() => {
+        const pct = (closest.jaccardSimilarity * 100).toFixed(0);
+        const j = closest.jaccardSimilarity * 100;
+        return j > 40
+          ? <>They share {pct}% of their audience — a deeply overlapping community where a collaboration is more about deepening loyalty than expanding reach</>
+          : j > 20
+          ? <>They share a significant audience ({pct}% overlap), which means strong social proof for joint projects, though fresh reach is limited</>
+          : j > 10
+          ? <>They have a meaningful crossover ({pct}% overlap) — enough shared trust to reduce friction, with plenty of new audience on both sides</>
+          : j > 3
+          ? <>They have a small but real overlap ({pct}% overlap) — mostly separate audiences, which means strong potential for cross-promotion</>
+          : <>They have almost entirely separate audiences ({pct}% overlap) — a collaboration would introduce each to a genuinely fresh community</>;
+      })()
+    // For 3+ accounts, characterize the group dynamic
+    : avgJaccard > 40
+    ? <>This is a tight-knit group — most pairs share significant overlap, so reach gains are modest but trust is built-in</>
+    : avgJaccard > 20
+    ? <>These accounts share meaningful audiences — good social proof with some room for fresh reach</>
+    : avgJaccard > 10
+    ? <>A balanced mix of shared and separate audiences — the sweet spot for cross-promotion</>
+    : avgJaccard > 3
+    ? <>Mostly distinct communities — each account brings a genuinely different audience to the table</>
+    : <>Almost entirely separate audiences — maximum fresh reach with minimal existing crossover</>;
+
+  // ── S3: Standout closest pair (3+ accounts, only if notably above group average) ──
+  const closestJaccard = closest.jaccardSimilarity * 100;
+  const showClosest = n >= 3 && sorted.length > 1 && closestJaccard > avgJaccard * 2 && closestJaccard > 5;
+  const closestPct = closestJaccard.toFixed(0);
+
+  // ── S4: Outlier account (4+ accounts — who has the most distinct audience?) ──
+  let outlierCopy: React.ReactNode = null;
+  if (n >= 4) {
+    // Compute average Jaccard per account across all their pairs
+    const avgByAccount = data.accounts.map(acct => {
+      const pairs = sorted.filter(p => p.handleA === acct.handle || p.handleB === acct.handle);
+      const avg = pairs.length > 0
+        ? pairs.reduce((s, p) => s + p.jaccardSimilarity, 0) / pairs.length
+        : 0;
+      return { handle: acct.handle, avg };
+    });
+    avgByAccount.sort((a, b) => a.avg - b.avg);
+    const mostDistinct = avgByAccount[0];
+    const groupAvgWithout = avgByAccount.slice(1).reduce((s, a) => s + a.avg, 0) / Math.max(avgByAccount.length - 1, 1);
+    // Only show if this account is notably more distinct than the rest
+    if (mostDistinct.avg < groupAvgWithout * 0.6) {
+      const distinctPct = (mostDistinct.avg * 100).toFixed(0);
+      outlierCopy = <> {colorName(mostDistinct.handle)} has the most distinct audience in the group — their average overlap with the others is just {distinctPct}%, making them the strongest reach multiplier.</>;
+    }
+  }
+
+  // ── S5: Furthest pair (3 accounts only — for 4+ the outlier sentence covers this) ──
   const gapPp = Math.abs(closest.jaccardSimilarity - furthest.jaccardSimilarity) * 100;
-  const showFurthest = sorted.length > 1 && furthest !== closest && gapPp >= 2;
+  const showFurthest = n === 3 && sorted.length > 1 && furthest !== closest && gapPp >= 2;
+  const furthestPct = (furthest.jaccardSimilarity * 100).toFixed(0);
 
-  // Size disparity note (when biggest is 5x+ the smallest)
+  // ── S6: Size disparity (when biggest is 5x+ the smallest) ──
   const showDisparity = smallestAlone > 0 && biggestAlone / smallestAlone >= 5;
   const smallestAcct = data.accounts.reduce((a, b) => a.followerCount < b.followerCount ? a : b);
   const biggestAcct = data.accounts.reduce((a, b) => a.followerCount > b.followerCount ? a : b);
@@ -527,12 +580,19 @@ export function CollaborationRead({ data }: { data: OverlapData }) {
       <p style={{
         fontSize: 14, lineHeight: 1.7, color: 'var(--color-navy)', margin: 0,
       }}>
-        Together, these accounts can reach <strong>{fmt(freshReach)} unique people</strong>
-        {netNew > 0 && <> — {netNewPct}% more than the largest account alone</>}
-        . {relationshipCopy}.
+        {/* S1: Reach */}
+        {reachCopy}. {groupCopy}.
+        {/* S3: Standout closest pair */}
+        {showClosest && (
+          <> The closest pair is {colorName(closest.handleA)} and {colorName(closest.handleB)} ({closestPct}% overlap) — notably tighter than the rest of the group.</>
+        )}
+        {/* S4: Outlier account */}
+        {outlierCopy}
+        {/* S5: Furthest pair (3-account only) */}
         {showFurthest && (
           <> The widest gap is between {colorName(furthest.handleA)} and {colorName(furthest.handleB)} ({furthestPct}% overlap) — the biggest opportunity for new reach.</>
         )}
+        {/* S6: Size disparity */}
         {showDisparity && (
           <> Note: {colorName(smallestAcct.handle)} is significantly smaller ({fmt(smallestAcct.followerCount)} vs {fmt(biggestAcct.followerCount)} followers), so the reach gain is asymmetric.</>
         )}

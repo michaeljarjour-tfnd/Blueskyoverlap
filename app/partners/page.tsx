@@ -437,7 +437,8 @@ function SignalBadge({ label }: { label: string }) {
 // ── Venn data adapters ───────────────────────────────────────────────────────
 
 function trioToOverlapData(trio: TrioRecommendation, userHandle: string): OverlapData {
-  const { overlaps, sizes } = trio;
+  const overlaps = trio.overlaps ?? { userA: 0, userB: 0, ab: 0, threeWay: 0 };
+  const sizes = trio.sizes ?? { user: 0, a: 0, b: 0 };
   const totalFollowers = sizes.user + sizes.a + sizes.b;
   return {
     accounts: [
@@ -527,8 +528,8 @@ function TrioCard({
       {/* Stats bar — Collaboration reach + Median new audience + signals */}
       {(() => {
         const totalFollowers = trio.sizes.user + trio.sizes.a + trio.sizes.b;
-        const newAudiences = [trio.newAudienceForUser, trio.newAudienceForA, trio.newAudienceForB].sort((a, b) => a - b);
-        const medianNew = newAudiences[1]; // middle of 3
+        const newAudiences = [trio.newAudienceForUser ?? 0, trio.newAudienceForA ?? 0, trio.newAudienceForB ?? 0].sort((a, b) => a - b);
+        const medianNew = newAudiences[1];
         const overlapLabel = trio.overlapLevel === 'high' ? 'High topic match'
           : trio.overlapLevel === 'medium' ? 'Moderate overlap' : 'Low overlap';
         return (
@@ -566,7 +567,7 @@ function TrioCard({
       {/* Full interactive Venn diagram with legend */}
       {(() => {
         const vennData = trioToOverlapData(trio, userHandle);
-        const { overlaps } = trio;
+        const overlaps = trio.overlaps ?? { userA: 0, userB: 0, ab: 0, threeWay: 0 };
         const totalOverlap = overlaps.userA + overlaps.userB + overlaps.ab - 2 * overlaps.threeWay;
         const avgJaccard = vennData.pairwiseOverlap.length > 0
           ? (vennData.pairwiseOverlap.reduce((s, p) => s + p.jaccardSimilarity, 0) / vennData.pairwiseOverlap.length) * 100
@@ -756,7 +757,7 @@ function PairCard({
       {/* Stats bar — Collaboration reach + Median new audience + signals */}
       {(() => {
         const totalFollowers = pair.sizes.user + pair.sizes.match;
-        const medianNew = Math.round((pair.newAudienceForUser + pair.newAudienceForMatch) / 2);
+        const medianNew = Math.round(((pair.newAudienceForUser ?? 0) + (pair.newAudienceForMatch ?? 0)) / 2);
         const overlapLabel = pair.overlapLevel === 'high' ? 'High topic match'
           : pair.overlapLevel === 'medium' ? 'Moderate overlap' : 'Low overlap';
         return (

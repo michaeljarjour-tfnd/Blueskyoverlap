@@ -676,7 +676,7 @@ function ThreeWayOverlapCards({
       {/* ── Full Venn diagram (no card wrapper) ───────────────────── */}
       <div key={mode} className="venn-animate-in">
         <div className="section-label" style={{ marginBottom: 12 }}>{label}</div>
-        <VennDiagram data={vennData} />
+        <VennDiagram data={vennData} countLabel={isFollowers ? 'followers' : 'engagers'} />
 
         {/* ── Below-Venn stats ──────────────────────────────────── */}
         <div style={{

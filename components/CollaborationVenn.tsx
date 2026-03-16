@@ -195,7 +195,7 @@ function solveLayout(data: OverlapData): { circles: Circle[]; svgH: number } {
 
 // ── Venn SVG with legend ────────────────────────────────────────────────────────
 
-export function VennDiagram({ data }: { data: OverlapData }) {
+export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapData; countLabel?: string }) {
   const { circles, svgH } = useMemo(() => solveLayout(data), [data]);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [lockedIdx, setLockedIdx] = useState<number | null>(null);
@@ -383,7 +383,7 @@ export function VennDiagram({ data }: { data: OverlapData }) {
               fontFamily="var(--font-mono)"
               fontSize={12}
             >
-              {fmt(acct.followerCount)} followers
+              {fmt(acct.followerCount)} {countLabel}
             </text>
           </g>
         );

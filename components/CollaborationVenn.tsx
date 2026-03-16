@@ -252,13 +252,13 @@ export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapD
       <defs>
         {/* Outer white glow drop-shadow (no inner shadow) */}
         {circles.map((_, i) => (
-          <filter key={`glow-${i}`} id={`venn-glow-${i}`} x="-10%" y="-10%" width="120%" height="120%" colorInterpolationFilters="sRGB">
+          <filter key={`glow-${i}`} id={`venn-glow-${i}`} x="-15%" y="-15%" width="130%" height="130%" colorInterpolationFilters="sRGB">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
             <feOffset />
-            <feGaussianBlur stdDeviation="2" />
+            <feGaussianBlur stdDeviation="3.5" />
             <feComposite in2="hardAlpha" operator="out" />
-            <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0" />
+            <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.3 0" />
             <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow" />
             <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape" />
           </filter>
@@ -266,13 +266,13 @@ export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapD
 
         {/* Dimmed filter — same outer glow, used when a circle is selected */}
         {circles.map((_, i) => (
-          <filter key={`dim-${i}`} id={`venn-dim-${i}`} x="-10%" y="-10%" width="120%" height="120%" colorInterpolationFilters="sRGB">
+          <filter key={`dim-${i}`} id={`venn-dim-${i}`} x="-15%" y="-15%" width="130%" height="130%" colorInterpolationFilters="sRGB">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
             <feOffset />
-            <feGaussianBlur stdDeviation="2" />
+            <feGaussianBlur stdDeviation="3.5" />
             <feComposite in2="hardAlpha" operator="out" />
-            <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.1 0" />
+            <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.06 0" />
             <feBlend mode="normal" in2="BackgroundImageFix" result="shadow" />
             <feBlend mode="normal" in="SourceGraphic" in2="shadow" result="shape" />
           </filter>
@@ -790,13 +790,13 @@ export function MiniVennSvg({ data, width = 240, id = '' }: { data: OverlapData;
     >
       <defs>
         {circles.map((_, i) => (
-          <filter key={`ms-${id}-${i}`} id={`mini-shadow-${id}-${i}`} x="-10%" y="-10%" width="120%" height="120%" colorInterpolationFilters="sRGB">
+          <filter key={`ms-${id}-${i}`} id={`mini-shadow-${id}-${i}`} x="-15%" y="-15%" width="130%" height="130%" colorInterpolationFilters="sRGB">
             <feFlood floodOpacity="0" result="BackgroundImageFix" />
             <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
             <feOffset />
-            <feGaussianBlur stdDeviation="2" />
+            <feGaussianBlur stdDeviation="3.5" />
             <feComposite in2="hardAlpha" operator="out" />
-            <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0" />
+            <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.3 0" />
             <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow" />
             <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow" result="shape" />
           </filter>

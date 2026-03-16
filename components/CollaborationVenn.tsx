@@ -110,15 +110,20 @@ function solveLayout(data: OverlapData): { circles: Circle[]; svgH: number } {
     const targetArea = overlapFraction * smallerArea;
     const d = distanceForOverlap(r1, r2, targetArea);
 
-    // Center within the VENN_W area (left portion of SVG)
+    // Scale down if circles extend past available width
+    const totalSpan = d + r1 + r2;
+    const availW = VENN_W - 2 * SVG_PAD;
+    const scale2 = totalSpan > availW ? availW / totalSpan : 1;
+    const sr1 = r1 * scale2, sr2 = r2 * scale2, sd = d * scale2;
+
     const cx = VENN_W / 2;
-    const cy = Math.max(...clampedRadii) + SVG_PAD;
-    const svgH = cy + Math.max(...clampedRadii) + SVG_PAD;
+    const cy = Math.max(sr1, sr2) + SVG_PAD;
+    const svgH = cy + Math.max(sr1, sr2) + SVG_PAD;
 
     return {
       circles: [
-        { x: cx - d / 2, y: cy, r: r1, handle: data.accounts[0].handle, color: ACCOUNT_COLORS[0] },
-        { x: cx + d / 2, y: cy, r: r2, handle: data.accounts[1].handle, color: ACCOUNT_COLORS[1] },
+        { x: cx - sd / 2, y: cy, r: sr1, handle: data.accounts[0].handle, color: ACCOUNT_COLORS[0] },
+        { x: cx + sd / 2, y: cy, r: sr2, handle: data.accounts[1].handle, color: ACCOUNT_COLORS[1] },
       ],
       svgH,
     };
@@ -176,8 +181,10 @@ function solveLayout(data: OverlapData): { circles: Circle[]; svgH: number } {
   const minX = Math.min(...allX), maxX = Math.max(...allX);
   const minY = Math.min(...allY), maxY = Math.max(...allY);
   const spanX = maxX - minX || 1;
+  const spanY = maxY - minY || 1;
   const availW = VENN_W - 2 * SVG_PAD;
-  const scale = Math.min(availW / spanX, 1);
+  const availH = 2 * MAX_RADIUS + 2 * SVG_PAD;
+  const scale = Math.min(availW / spanX, availH / spanY, 1);
   const offsetX = SVG_PAD + (availW - spanX * scale) / 2 - minX * scale;
   const offsetY = SVG_PAD - minY * scale;
 
@@ -589,13 +596,20 @@ function solveCompactLayout(
     const smallerArea = Math.PI * Math.min(r1, r2) ** 2;
     const targetArea = overlapFraction * smallerArea;
     const d = distanceForOverlap(r1, r2, targetArea);
+
+    // Scale down if circles extend past available width
+    const totalSpan = d + r1 + r2;
+    const availW = width - 2 * pad;
+    const scale2 = totalSpan > availW ? availW / totalSpan : 1;
+    const sr1 = r1 * scale2, sr2 = r2 * scale2, sd = d * scale2;
+
     const cx = width / 2;
-    const cy = Math.max(r1, r2) + pad;
-    const svgH = cy + Math.max(r1, r2) + pad;
+    const cy = Math.max(sr1, sr2) + pad;
+    const svgH = cy + Math.max(sr1, sr2) + pad;
     return {
       circles: [
-        { x: cx - d / 2, y: cy, r: r1, handle: data.accounts[0].handle, color: ACCOUNT_COLORS[0] },
-        { x: cx + d / 2, y: cy, r: r2, handle: data.accounts[1].handle, color: ACCOUNT_COLORS[1] },
+        { x: cx - sd / 2, y: cy, r: sr1, handle: data.accounts[0].handle, color: ACCOUNT_COLORS[0] },
+        { x: cx + sd / 2, y: cy, r: sr2, handle: data.accounts[1].handle, color: ACCOUNT_COLORS[1] },
       ],
       svgW: width,
       svgH,
@@ -649,8 +663,10 @@ function solveCompactLayout(
   const bMinX = Math.min(...allX), bMaxX = Math.max(...allX);
   const bMinY = Math.min(...allY), bMaxY = Math.max(...allY);
   const spanX = bMaxX - bMinX || 1;
+  const spanY = bMaxY - bMinY || 1;
   const availW = width - 2 * pad;
-  const scale = Math.min(availW / spanX, 1);
+  const availH = 2 * maxR + 2 * pad;
+  const scale = Math.min(availW / spanX, availH / spanY, 1);
   const offsetX = pad + (availW - spanX * scale) / 2 - bMinX * scale;
   const offsetY = pad - bMinY * scale;
 

@@ -457,27 +457,50 @@ function SummaryStats({ data }: { data: OverlapData }) {
 
 export function CollaborationRead({ data }: { data: OverlapData }) {
   const sorted = [...data.pairwiseOverlap].sort(
-    (a, b) => b.jaccardSimilarity - a.jaccardSimilarity
+    (a, b) => b.jaccardSimilarity - a.jaccardSimilarity,
   );
-  const furthest = sorted[sorted.length - 1];
   const closest = sorted[0];
+  const furthest = sorted[sorted.length - 1];
 
   const getIdx = (handle: string) => data.accounts.findIndex(a => a.handle === handle);
-  const getName = (handle: string) => {
+  const getFirst = (handle: string) => {
     const acct = data.accounts.find(a => a.handle === handle);
-    return acct?.displayName || handle;
+    return ((acct?.displayName || handle).split(' ')[0]);
   };
-  const getFirst = (handle: string) => getName(handle).split(' ')[0];
-  const colorName = (handle: string) => {
-    const idx = getIdx(handle);
-    return <span style={{ color: ACCOUNT_COLORS[idx] ?? 'var(--color-navy)', fontWeight: 600 }}>{getFirst(handle)}</span>;
-  };
+  const colorName = (handle: string) => (
+    <span style={{ color: ACCOUNT_COLORS[getIdx(handle)] ?? 'var(--color-navy)', fontWeight: 600 }}>
+      {getFirst(handle)}
+    </span>
+  );
 
   const freshReach = data.uniqueReach;
   const biggestAlone = Math.max(...data.accounts.map(a => a.followerCount));
+  const smallestAlone = Math.min(...data.accounts.map(a => a.followerCount));
   const netNew = freshReach - biggestAlone;
   const netNewPct = biggestAlone > 0 ? ((netNew / biggestAlone) * 100).toFixed(0) : '0';
   const closestPct = (closest.jaccardSimilarity * 100).toFixed(0);
+  const furthestPct = (furthest.jaccardSimilarity * 100).toFixed(0);
+  const closestJaccard = closest.jaccardSimilarity * 100; // 0–100 scale
+
+  // Tier-based relationship characterization
+  const relationshipCopy = closestJaccard > 40
+    ? <>{colorName(closest.handleA)} and {colorName(closest.handleB)} share {closestPct}% of their audience — a deeply overlapping community. A collaboration here is more about deepening loyalty than expanding reach</>
+    : closestJaccard > 20
+    ? <>{colorName(closest.handleA)} and {colorName(closest.handleB)} share a significant audience ({closestPct}% overlap), which means strong social proof for joint projects, though fresh reach is limited</>
+    : closestJaccard > 10
+    ? <>{colorName(closest.handleA)} and {colorName(closest.handleB)} have a meaningful crossover ({closestPct}% overlap) — enough shared trust to reduce friction, with plenty of new audience on both sides</>
+    : closestJaccard > 3
+    ? <>{colorName(closest.handleA)} and {colorName(closest.handleB)} have a small but real overlap ({closestPct}% overlap) — mostly separate audiences, which means strong potential for cross-promotion</>
+    : <>{colorName(closest.handleA)} and {colorName(closest.handleB)} have almost entirely separate audiences ({closestPct}% overlap) — a collaboration would introduce each to a genuinely fresh community</>;
+
+  // Furthest pair (multi-account only, when there's a meaningful gap)
+  const gapPp = Math.abs(closest.jaccardSimilarity - furthest.jaccardSimilarity) * 100;
+  const showFurthest = sorted.length > 1 && furthest !== closest && gapPp >= 2;
+
+  // Size disparity note (when biggest is 5x+ the smallest)
+  const showDisparity = smallestAlone > 0 && biggestAlone / smallestAlone >= 5;
+  const smallestAcct = data.accounts.reduce((a, b) => a.followerCount < b.followerCount ? a : b);
+  const biggestAcct = data.accounts.reduce((a, b) => a.followerCount > b.followerCount ? a : b);
 
   return (
     <div style={{
@@ -491,18 +514,14 @@ export function CollaborationRead({ data }: { data: OverlapData }) {
       <p style={{
         fontSize: 14, lineHeight: 1.7, color: 'var(--color-navy)', margin: 0,
       }}>
-        This collaboration has the potential to reach <strong>{fmt(freshReach)} followers</strong>
+        Together, these accounts can reach <strong>{fmt(freshReach)} unique people</strong>
         {netNew > 0 && <> — {netNewPct}% more than the largest account alone</>}
-        . The tightest relationship is between {colorName(closest.handleA)} and {colorName(closest.handleB)} ({closestPct}% overlap)
-        {closest.sharedFollowers > 0
-          ? <>, suggesting a loyal audience that already follows both. That presents high potential for joint offers</>
-          : <> — these are distinct communities</>
-        }.
-        {furthest && furthest !== closest && (
-          <> {colorName(furthest.handleA === closest.handleA || furthest.handleA === closest.handleB
-            ? furthest.handleB : furthest.handleA)} brings the freshest reach: Their overlap
-            with {colorName(furthest.handleA === closest.handleA || furthest.handleA === closest.handleB
-            ? furthest.handleA : furthest.handleB)} means significant untapped audience for cross-promotion.</>
+        . {relationshipCopy}.
+        {showFurthest && (
+          <> The widest gap is between {colorName(furthest.handleA)} and {colorName(furthest.handleB)} ({furthestPct}% overlap) — the biggest opportunity for new reach.</>
+        )}
+        {showDisparity && (
+          <> Note: {colorName(smallestAcct.handle)} is significantly smaller ({fmt(smallestAcct.followerCount)} vs {fmt(biggestAcct.followerCount)} followers), so the reach gain is asymmetric.</>
         )}
       </p>
     </div>

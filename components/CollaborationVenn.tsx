@@ -362,7 +362,7 @@ export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapD
       {/* Legend — right side, reduced opacity, highlights on hover/tap */}
       {data.accounts.map((acct, i) => {
         const y = legendStartY + i * legendItemH;
-        const color = ACCOUNT_COLORS[i];
+        const color = circles[i]?.color ?? ACCOUNT_COLORS[data.colorIndices?.[i] ?? i];
         const isActive = activeIdx === i;
         const legendOpacity = activeIdx === null ? 0.5 : isActive ? 1 : 0.3;
         return (
@@ -476,11 +476,15 @@ export function CollaborationRead({ data }: { data: OverlapData }) {
     const acct = data.accounts.find(a => a.handle === handle);
     return ((acct?.displayName || handle).split(' ')[0]);
   };
-  const colorName = (handle: string) => (
-    <span style={{ color: ACCOUNT_COLORS[getIdx(handle)] ?? 'var(--color-navy)', fontWeight: 600 }}>
-      {getFirst(handle)}
-    </span>
-  );
+  const colorName = (handle: string) => {
+    const idx = getIdx(handle);
+    const colorIdx = data.colorIndices?.[idx] ?? idx;
+    return (
+      <span style={{ color: ACCOUNT_COLORS[colorIdx] ?? 'var(--color-navy)', fontWeight: 600 }}>
+        {getFirst(handle)}
+      </span>
+    );
+  };
 
   const freshReach = data.uniqueReach;
   const biggestAlone = Math.max(...data.accounts.map(a => a.followerCount));

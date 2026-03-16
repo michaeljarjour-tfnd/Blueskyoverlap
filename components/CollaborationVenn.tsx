@@ -20,6 +20,7 @@ export type OverlapData = {
   uniqueReach: number;
   totalFollowers: number;
   homogeneityScore: number; // 0–1
+  medianNewAudience?: number;
 };
 
 // ── Constants ───────────────────────────────────────────────────────────────────
@@ -433,17 +434,19 @@ function SummaryStats({ data }: { data: OverlapData }) {
         </div>
       </div>
 
-      {/* Homogeneity */}
+      {/* Median new audience */}
       <div style={{
         background: '#fff',
         border: '1px solid var(--color-border)',
         borderRadius: 6,
         padding: '20px 24px',
       }}>
-        <div className="metric-label">Audience Homogeneity</div>
-        <div className="metric-value">{homoPct}%</div>
+        <div className="metric-label">Median New Audience</div>
+        <div className="metric-value">
+          {data.medianNewAudience != null ? fmt(data.medianNewAudience) : `${homoPct}%`}
+        </div>
         <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
-          {homoLabel}
+          {data.medianNewAudience != null ? 'per collaborator' : homoLabel}
         </div>
       </div>
     </div>

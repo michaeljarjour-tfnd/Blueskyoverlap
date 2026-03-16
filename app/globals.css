@@ -409,6 +409,15 @@ html, body {
   margin-left: 2px;
 }
 
+/* ── Venn fade animation ──────────────────────────────────────────────────── */
+@keyframes vennFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.venn-animate-in {
+  animation: vennFadeIn 0.3s ease both;
+}
+
 /* ── Progress bars ─────────────────────────────────────────────────────────── */
 .progress-bar-track {
   background: var(--color-bg-light);

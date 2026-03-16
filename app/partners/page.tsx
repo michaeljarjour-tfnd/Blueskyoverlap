@@ -630,13 +630,16 @@ function TrioCard({
 
       {/* Deep dive */}
       <div style={{ textAlign: 'right' }}>
-        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 4px' }}>
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 8px' }}>
           Discover engagement overlaps and how many people you could convert together
         </p>
         <a href={analysisUrl} style={{
-          fontSize: 13, color: 'var(--color-blue)', textDecoration: 'none', fontWeight: 500,
+          display: 'inline-block', padding: '8px 20px', borderRadius: 4,
+          background: '#04182B', color: '#fff', fontSize: 13, fontWeight: 500,
+          textDecoration: 'none',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
         }}>
-          Run full analysis →
+          Dive deeper
         </a>
       </div>
     </div>
@@ -805,11 +808,16 @@ function PairCard({
       </div>
 
       <div style={{ textAlign: 'right' }}>
-        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 4px' }}>
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '0 0 8px' }}>
           Discover engagement overlaps and how many people you could convert together
         </p>
-        <a href={analysisUrl} style={{ fontSize: 13, color: 'var(--color-blue)', textDecoration: 'none', fontWeight: 500 }}>
-          Run full analysis →
+        <a href={analysisUrl} style={{
+          display: 'inline-block', padding: '8px 20px', borderRadius: 4,
+          background: '#04182B', color: '#fff', fontSize: 13, fontWeight: 500,
+          textDecoration: 'none',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
+        }}>
+          Dive deeper
         </a>
       </div>
     </div>

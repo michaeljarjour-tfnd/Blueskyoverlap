@@ -26,14 +26,10 @@ export async function POST(req: NextRequest) {
 
     const reportId = nanoid(8);
 
-    // Strip overlapDetails (DID sample arrays) to keep stored size small
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { overlapDetails, ...resultWithoutDetails } = body;
-
     const saved: SavedReport = {
       reportId,
       createdAt: new Date().toISOString(),
-      result: resultWithoutDetails,
+      result: body,
     };
 
     await redis.set(`report:${reportId}`, JSON.stringify(saved), { ex: REPORT_TTL });

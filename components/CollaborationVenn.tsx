@@ -615,6 +615,11 @@ export function CollaborationRead({ data }: { data: OverlapData }) {
           <> Note: {colorName(smallestAcct.handle)} is significantly smaller ({fmt(smallestAcct.followerCount)} vs {fmt(biggestAcct.followerCount)} followers), so the reach gain is asymmetric.</>
         )}
       </p>
+      <p style={{
+        fontSize: 12, lineHeight: 1.6, color: 'var(--color-text-faint)', margin: '14px 0 0', fontStyle: 'italic',
+      }}>
+        This is based purely on data on Bluesky, which is a newer platform. Overlap and account sizes can be vastly different on other platforms.
+      </p>
     </div>
   );
 }

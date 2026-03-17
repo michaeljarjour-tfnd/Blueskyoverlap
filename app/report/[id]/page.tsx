@@ -129,10 +129,10 @@ export default async function ReportPage({
     );
   }
 
-  // Build a full AnalysisResult with empty overlapDetails (drill-down disabled)
+  // Ensure overlapDetails exists (older reports may not have it)
   const fullResult = {
     ...report.result,
-    overlapDetails: {} as Record<string, { followerDids: string[]; engagementDids: string[] }>,
+    overlapDetails: report.result.overlapDetails ?? {},
   };
 
   return <ReportClient result={fullResult} createdAt={report.createdAt} />;

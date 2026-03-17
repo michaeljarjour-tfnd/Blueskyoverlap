@@ -186,10 +186,10 @@ export interface JournalistEntry {
 
 // ── Saved reports ──────────────────────────────────────────────────────────────
 
-/** Stored in Redis for shareable report links. Omits overlapDetails (DID samples)
- *  to keep stored size small (~15-30 KB vs ~300 KB with samples). */
+/** Stored in Redis for shareable report links. Includes overlapDetails (DID samples)
+ *  so the drill-down modal works on shared reports. */
 export interface SavedReport {
   reportId: string;
   createdAt: string; // ISO 8601
-  result: Omit<AnalysisResult, 'overlapDetails'>;
+  result: AnalysisResult;
 }

@@ -175,6 +175,7 @@ export interface JournalistEntry {
   did: string;
   handle: string;
   displayName: string;
+  avatar?: string;
   topics: string[];
   geography?: string;
   outlet?: string;

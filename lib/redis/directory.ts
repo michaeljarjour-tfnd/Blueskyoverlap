@@ -32,6 +32,7 @@ export async function seedDirectory(entries: JournalistEntry[]): Promise<number>
     pipeline.hset(`dir:journalist:${entry.did}`, {
       handle: entry.handle,
       displayName: entry.displayName,
+      avatar: entry.avatar ?? '',
       topics: JSON.stringify(entry.topics),
       geography: entry.geography ?? '',
       outlet: entry.outlet ?? '',
@@ -163,6 +164,7 @@ export async function getJournalistByDid(did: string): Promise<JournalistEntry |
     did,
     handle: String(meta.handle),
     displayName: String(meta.displayName || ''),
+    avatar: meta.avatar ? String(meta.avatar) : undefined,
     topics: parseTopics(meta.topics),
     geography: meta.geography ? String(meta.geography) : undefined,
     outlet: meta.outlet ? String(meta.outlet) : undefined,
@@ -171,6 +173,67 @@ export async function getJournalistByDid(did: string): Promise<JournalistEntry |
     verified: meta.verified === '1' || meta.verified === 1 || meta.verified === true,
     addedAt: String(meta.addedAt || ''),
   };
+}
+
+// ── Search ───────────────────────────────────────────────────────────────────
+
+/** Text search across all directory entries by handle or displayName. */
+export async function searchDirectory(query: string, limit = 8): Promise<JournalistEntry[]> {
+  const redis = getRedis();
+  if (!redis) return [];
+
+  const q = query.toLowerCase();
+  if (q.length < 2) return [];
+
+  // Fetch all DIDs from the sorted set
+  const dids = (await redis.zrange('dir:journalists', 0, -1)) as string[];
+  if (dids.length === 0) return [];
+
+  // Pipeline-fetch all metadata hashes
+  const pipeline = redis.pipeline();
+  for (const did of dids) {
+    pipeline.hgetall(`dir:journalist:${did}`);
+  }
+  const results = await pipeline.exec();
+
+  // Filter and rank matches
+  type Scored = { entry: JournalistEntry; prefixMatch: boolean };
+  const matches: Scored[] = [];
+
+  for (let i = 0; i < dids.length; i++) {
+    const meta = results[i] as Record<string, unknown> | null;
+    if (!meta || !meta.handle) continue;
+
+    const handle = String(meta.handle).toLowerCase();
+    const displayName = String(meta.displayName || '').toLowerCase();
+
+    if (!handle.includes(q) && !displayName.includes(q)) continue;
+
+    matches.push({
+      entry: {
+        did: dids[i],
+        handle: String(meta.handle),
+        displayName: String(meta.displayName || ''),
+        avatar: meta.avatar ? String(meta.avatar) : undefined,
+        topics: parseTopics(meta.topics),
+        geography: meta.geography ? String(meta.geography) : undefined,
+        outlet: meta.outlet ? String(meta.outlet) : undefined,
+        followerCount: Number(meta.followerCount) || undefined,
+        matchConfidence: Number(meta.matchConfidence) || 0,
+        verified: meta.verified === '1' || meta.verified === 1 || meta.verified === true,
+        addedAt: String(meta.addedAt || ''),
+      },
+      prefixMatch: handle.startsWith(q) || displayName.startsWith(q),
+    });
+  }
+
+  // Sort: prefix matches first, then by followerCount descending
+  matches.sort((a, b) => {
+    if (a.prefixMatch !== b.prefixMatch) return a.prefixMatch ? -1 : 1;
+    return (b.entry.followerCount ?? 0) - (a.entry.followerCount ?? 0);
+  });
+
+  return matches.slice(0, limit).map(m => m.entry);
 }
 
 // ── Stats ────────────────────────────────────────────────────────────────────

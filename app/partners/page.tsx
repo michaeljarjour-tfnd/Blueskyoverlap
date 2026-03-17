@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatFollowers } from '@/lib/analysis/interpret';
 import { VennDiagram, MiniVennSvg, ACCOUNT_COLORS, fmt } from '@/components/CollaborationVenn';
 import type { OverlapData } from '@/components/CollaborationVenn';
+import HandleTypeahead from '@/components/HandleTypeahead';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -1171,10 +1172,13 @@ export default function PartnersPage() {
           </div>
 
           <div className="input-group">
-            <label>Your Bluesky handle</label>
-            <input className="handle-input" type="text" placeholder="e.g. yourname.bsky.social"
-              value={handle} onChange={e => setHandle(e.target.value)}
-              autoComplete="off" spellCheck={false} />
+            <HandleTypeahead
+              value={handle}
+              onChange={setHandle}
+              onSelect={setHandle}
+              placeholder="e.g. yourname.bsky.social"
+              label="Your Bluesky handle"
+            />
           </div>
           <p className="tip">Paste your handle or a full Bluesky profile URL.</p>
 

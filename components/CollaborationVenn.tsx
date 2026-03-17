@@ -353,26 +353,56 @@ export function VennDiagram({ data, countLabel = 'followers' }: { data: OverlapD
             })}
           </g>
 
-          {/* ── Badges — follower count near each selected circle ── */}
-          {Array.from(activeSet).map(idx => {
-            const c = circles[idx];
-            const text = fmt(data.accounts[idx].followerCount);
-            const badgeW = Math.max(48, text.length * 9 + 18);
-            const badgeX = c.x - badgeW / 2;
-            const badgeY = c.y - c.r - 30;
-            return (
-              <g key={`badge-${idx}`} pointerEvents="none">
-                <rect x={badgeX} y={badgeY} width={badgeW} height={25} rx={4} fill="#04182B" />
-                <text
-                  x={c.x} y={badgeY + 17}
-                  textAnchor="middle" fill="white"
-                  fontFamily="var(--font-mono)" fontWeight={600} fontSize={13}
-                >
-                  {text}
-                </text>
-              </g>
-            );
-          })}
+          {/* ── Badge — overlap count when 2+ circles selected, follower count for single ── */}
+          {(() => {
+            const selected = Array.from(activeSet).sort((a, b) => a - b);
+            if (selected.length === 0) return null;
+
+            // 2 selected → show pairwise overlap between them
+            if (selected.length === 2) {
+              const [idxA, idxB] = selected;
+              const handleA = data.accounts[idxA].handle;
+              const handleB = data.accounts[idxB].handle;
+              const pair = data.pairwiseOverlap.find(
+                p => (p.handleA === handleA && p.handleB === handleB)
+                  || (p.handleA === handleB && p.handleB === handleA)
+              );
+              if (pair) {
+                // Position badge at midpoint between the two circles
+                const cA = circles[idxA];
+                const cB = circles[idxB];
+                const mx = (cA.x + cB.x) / 2;
+                const my = (cA.y + cB.y) / 2;
+                const text = `${fmt(pair.sharedFollowers)} shared`;
+                const badgeW = Math.max(48, text.length * 8 + 18);
+                return (
+                  <g pointerEvents="none">
+                    <rect x={mx - badgeW / 2} y={my - 13} width={badgeW} height={25} rx={4} fill="#04182B" />
+                    <text x={mx} y={my + 4} textAnchor="middle" fill="white"
+                      fontFamily="var(--font-mono)" fontWeight={600} fontSize={12}>{text}</text>
+                  </g>
+                );
+              }
+            }
+
+            // 3 selected → show triple overlap if available
+            if (selected.length >= 3 && data.tripleOverlap != null) {
+              const cx = circles.reduce((s, c) => s + c.x, 0) / circles.length;
+              const cy = circles.reduce((s, c) => s + c.y, 0) / circles.length;
+              const text = `${fmt(data.tripleOverlap)} all three`;
+              const badgeW = Math.max(48, text.length * 8 + 18);
+              return (
+                <g pointerEvents="none">
+                  <rect x={cx - badgeW / 2} y={cy - 13} width={badgeW} height={25} rx={4} fill="#04182B" />
+                  <text x={cx} y={cy + 4} textAnchor="middle" fill="white"
+                    fontFamily="var(--font-mono)" fontWeight={600} fontSize={12}>{text}</text>
+                </g>
+              );
+            }
+
+            // Single selected → no badge (follower count already in legend)
+            return null;
+          })()}
         </>
       )}
 

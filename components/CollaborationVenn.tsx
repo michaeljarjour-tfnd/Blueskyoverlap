@@ -483,6 +483,7 @@ function SummaryStats({ data }: { data: OverlapData }) {
 
 export function CollaborationRead({ data }: { data: OverlapData }) {
   const n = data.accounts.length;
+  if (n < 2 || data.pairwiseOverlap.length === 0) return null;
   const sorted = [...data.pairwiseOverlap].sort(
     (a, b) => b.jaccardSimilarity - a.jaccardSimilarity,
   );

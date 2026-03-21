@@ -1066,7 +1066,6 @@ export default function PartnersPage() {
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [selectedGeo, setSelectedGeo] = useState('');
   const [topics, setTopics] = useState<string[]>([]);
-  const [geographies, setGeographies] = useState<string[]>([]);
   const [apiResult, setApiResult] = useState<APIResponse | null>(null);
   const [noCacheUser, setNoCacheUser] = useState<NoCacheResponse['user'] | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -1080,11 +1079,6 @@ export default function PartnersPage() {
         if (data.topics?.length) {
           const consolidated = consolidateTopics(data.topics);
           setTopics(consolidated);
-        }
-        // Consolidate geographies into regions
-        if (data.geographies?.length) {
-          const consolidated = consolidateGeographies(data.geographies);
-          setGeographies(consolidated);
         }
       })
       .catch(() => {});
@@ -1182,22 +1176,28 @@ export default function PartnersPage() {
           </div>
           <p className="tip">Paste your handle or a full Bluesky profile URL.</p>
 
-          {(topics.length > 0 || geographies.length > 0) && (
+          {topics.length > 0 && (
             <>
               <hr className="divider" />
               <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '0 0 14px', lineHeight: 1.5 }}>
                 Add your topic and location to improve your matches.
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {topics.length > 0 && (
-                  <TopicMultiSelect options={topics} selected={selectedTopics} onChange={setSelectedTopics} />
-                )}
-                {geographies.length > 0 && (
-                  <ComboSelect label="Your location" options={geographies}
-                    value={selectedGeo}
-                    onChange={(v) => setSelectedGeo(normalizeUserGeo(v))}
-                    placeholder="Select location…" />
-                )}
+                <TopicMultiSelect options={topics} selected={selectedTopics} onChange={setSelectedTopics} />
+                <div className="input-group" style={{ marginBottom: 0 }}>
+                  <label>Your location</label>
+                  <select className="handle-input" value={selectedGeo}
+                    onChange={(e) => setSelectedGeo(e.target.value)}
+                    style={{ cursor: 'pointer' }}>
+                    <option value="">Select continent…</option>
+                    <option value="Africa">Africa</option>
+                    <option value="Asia">Asia</option>
+                    <option value="Europe">Europe</option>
+                    <option value="North America">North America</option>
+                    <option value="Oceania">Oceania</option>
+                    <option value="South America">South America</option>
+                  </select>
+                </div>
               </div>
             </>
           )}
